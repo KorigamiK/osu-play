@@ -1,23 +1,24 @@
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { existsSync, writeFileSync } from "node:fs";
-import { promisify } from "node:util";
+import { writeFileSync } from "node:fs";
 
+import { ProcessTerminal, TUI } from "@mariozechner/pi-tui";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import {
-  getDefaultOsuDataDir,
-  getRealmDBPath,
-} from "../utils/mod.js";
 import { buildPlaylist } from "../playlist/mod.js";
+import { MpvPlayerBackend, PlaylistPlayerSession } from "../player/mod.js";
+import { PlaylistPlayerScreen } from "../tui/player-screen.js";
+import { getDefaultOsuDataDir, getRealmDBPath } from "../utils/mod.js";
 
-const execFilePromise = promisify(execFile);
-
-type BeatmapChoice = {
-  title: string;
-  path: string;
-};
+function formatRealmLoadError(error: unknown) {
+  return [
+    "Realm native bindings could not be loaded.",
+    `Current Node runtime: ${process.version}.`,
+    "To repair Realm bindings in this project, run `bun run repair:realm` (or `bun run setup` to reinstall dependencies).",
+    "If you installed dependencies on Node 22, switch to Node 20 LTS and rerun the repair command.",
+    `Original error: ${error instanceof Error ? error.message : String(error)}`,
+  ].join("\n");
+}
 
 async function loadRealmDependencies() {
   try {
@@ -31,23 +32,16 @@ async function loadRealmDependencies() {
       ...lazerModule,
     };
   } catch (error) {
-    throw new Error(
-      [
-        "Realm native bindings could not be loaded.",
-        `Current Node runtime: ${process.version}.`,
-        "To repair Realm bindings in this project, run `bun run repair:realm` (or `bun run setup` to reinstall dependencies).",
-        "If you installed dependencies on Node 22, switch to Node 20 LTS and rerun the repair command.",
-        `Original error: ${error instanceof Error ? error.message : String(error)}`,
-      ].join("\n"),
-      { cause: error },
-    );
+    throw new Error(formatRealmLoadError(error), { cause: error });
   }
 }
 
 export function getArgs() {
   return yargs(hideBin(process.argv))
     .scriptName("osu-play")
-    .usage("Play music from your osu!lazer beatmaps from the terminal\nUsage: $0 [options]")
+    .usage(
+      "Play music from your osu!lazer beatmaps in a minimal terminal player\nUsage: $0 [options]",
+    )
     .option("reload", {
       type: "boolean",
       default: false,
@@ -56,7 +50,7 @@ export function getArgs() {
     })
     .option("exportPlaylist", {
       type: "string",
-      describe: "Export playlist to a file",
+      describe: "Export playlist to a file instead of launching the player",
     })
     .option("osuDataDir", {
       type: "string",
@@ -73,44 +67,89 @@ export function getArgs() {
       type: "boolean",
       default: false,
       alias: "l",
-      describe: "Loop the playlist on end",
+      describe: "Loop the playlist when playback reaches the end",
     })
     .alias("help", "h")
     .help()
     .parse();
 }
 
-async function promptForBeatmap(uniqueBeatmaps: BeatmapChoice[]) {
-  const { default: prompts } = await import("prompts");
-  const response = await prompts<"beatmap">({
-    type: "autocomplete",
-    name: "beatmap",
-    message: "Which map do you want to play:",
-    choices: uniqueBeatmaps.map((beatmap, index) => ({
-      title: beatmap.title,
-      value: index,
-    })),
-  });
+async function createPlaylist(osuDataDir: string) {
+  const realmDBPath = getRealmDBPath({ osuDataDir });
+  if (!realmDBPath) {
+    throw new Error("Realm DB not found");
+  }
 
-  return response.beatmap as number | undefined;
+  const {
+    Realm,
+    formatLazerSchemaCompatibilityError,
+    getBeatmapSets,
+    getLazerDB,
+    inspectLazerSchema,
+  } = await loadRealmDependencies();
+
+  Realm.flags.ALLOW_CLEAR_TEST_STATE = true;
+
+  const realm = await getLazerDB(realmDBPath);
+
+  try {
+    const schemaReport = inspectLazerSchema(realm);
+    if (!schemaReport.compatible) {
+      throw new Error(formatLazerSchemaCompatibilityError(schemaReport));
+    }
+
+    return buildPlaylist(getBeatmapSets(realm), osuDataDir);
+  } finally {
+    realm.close();
+  }
 }
 
-async function openBeatmap(filePath: string) {
-  switch (process.platform) {
-    case "darwin":
-      await execFilePromise("open", [filePath]);
-      return;
-    case "win32":
-      await execFilePromise("cmd", ["/c", "start", "", filePath]);
-      return;
-    default:
-      await execFilePromise("xdg-open", [filePath]);
+async function runTuiPlayer(
+  playlist: Awaited<ReturnType<typeof createPlaylist>>,
+  loop: boolean,
+) {
+  const backend = new MpvPlayerBackend();
+  const session = new PlaylistPlayerSession(playlist, backend, { loop });
+  const terminal = new ProcessTerminal();
+  const tui = new TUI(terminal);
+  const screen = new PlaylistPlayerScreen(session, () => terminal.rows);
+
+  let started = false;
+
+  const exitPromise = new Promise<void>((resolve) => {
+    screen.onQuit = () => resolve();
+  });
+
+  const unsubscribe = session.subscribe((snapshot) => {
+    screen.setSnapshot(snapshot);
+    if (started) {
+      tui.requestRender();
+    }
+  });
+
+  try {
+    await session.start();
+
+    tui.addChild(screen);
+    tui.setFocus(screen);
+    tui.start();
+    started = true;
+
+    await exitPromise;
+  } finally {
+    unsubscribe();
+
+    if (started) {
+      await terminal.drainInput().catch(() => {});
+      tui.stop();
+    }
+
+    await session.dispose();
   }
 }
 
 export async function main() {
   const argv = await getArgs();
-  console.log("[INFO] osu-play");
 
   if (argv.reload) {
     console.log(
@@ -124,95 +163,19 @@ export async function main() {
     );
   }
 
-  if (argv.osuDataDir !== getDefaultOsuDataDir()) {
-    console.log(`[INFO] Using osu!lazer data directory: ${argv.osuDataDir}`);
+  const playlist = await createPlaylist(argv.osuDataDir);
+
+  if (argv.exportPlaylist) {
+    const playlistContents = playlist.map((track) => track.path).join("\n");
+    writeFileSync(argv.exportPlaylist, playlistContents);
+    console.log(
+      `[INFO] Exported ${playlist.length} tracks to ${argv.exportPlaylist}.`,
+    );
+    console.log(
+      `[INFO] Use something like \`mpv --playlist=${path.resolve(argv.exportPlaylist)}\` to play the playlist.`,
+    );
+    return;
   }
 
-  const realmDBPath = getRealmDBPath({
-    osuDataDir: argv.osuDataDir,
-  });
-
-  if (!realmDBPath) {
-    throw new Error("Realm DB not found");
-  }
-
-  const {
-    Realm,
-    LAST_STATIC_LAZER_SCHEMA_VERSION,
-    formatLazerSchemaCompatibilityError,
-    getBeatmapSets,
-    getLazerDB,
-    inspectLazerSchema,
-  } = await loadRealmDependencies();
-
-  Realm.flags.ALLOW_CLEAR_TEST_STATE = true;
-
-  const realm = await getLazerDB(realmDBPath);
-
-  try {
-    const schemaReport = inspectLazerSchema(realm);
-    console.log(`currentSchema: ${schemaReport.version}`);
-
-    if (!schemaReport.compatible) {
-      throw new Error(formatLazerSchemaCompatibilityError(schemaReport));
-    }
-
-    if (schemaReport.version !== LAST_STATIC_LAZER_SCHEMA_VERSION) {
-      console.log(
-        `[INFO] Detected osu!lazer schema version ${schemaReport.version}; continuing with reflected compatibility checks.`,
-      );
-    }
-
-    const beatmapSets = getBeatmapSets(realm);
-    const uniqueBeatmaps: BeatmapChoice[] = buildPlaylist(beatmapSets, argv.osuDataDir);
-
-    console.log(`beatmap songs: ${uniqueBeatmaps.length}`);
-
-    if (argv.exportPlaylist) {
-      console.log(`[INFO] Exporting playlist to ${argv.exportPlaylist}`);
-      const playlist = uniqueBeatmaps
-        .map((beatmap) => beatmap.path)
-        .join("\n");
-      writeFileSync(argv.exportPlaylist, playlist);
-      console.log(
-        `[INFO] Done. Use something like \`mpv --playlist=${path.resolve(argv.exportPlaylist)}\` to play the playlist`,
-      );
-      return;
-    }
-
-    const selectedBeatmap = await promptForBeatmap(uniqueBeatmaps);
-    if (selectedBeatmap === undefined) {
-      console.log("[INFO] Cancelled");
-      return;
-    }
-
-    console.log(`Selected: ${selectedBeatmap}`);
-
-    for (let i = selectedBeatmap; i < uniqueBeatmaps.length; i += 1) {
-      const beatmap = uniqueBeatmaps[i];
-
-      if (!beatmap) {
-        continue;
-      }
-
-      console.log(`Map: ${beatmap.title}`);
-      if (beatmap.path && existsSync(beatmap.path)) {
-        console.log(`Playing ${beatmap.title}`);
-        await openBeatmap(beatmap.path);
-      } else {
-        console.log(`File does not exist: ${beatmap.path}`);
-      }
-
-      if (i < uniqueBeatmaps.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      } else if (argv.loop) {
-        console.log("[INFO] Looping playlist");
-        i = -1;
-      } else {
-        console.log("[INFO] Done. Use --loop to loop the playlist");
-      }
-    }
-  } finally {
-    realm.close();
-  }
+  await runTuiPlayer(playlist, argv.loop);
 }
