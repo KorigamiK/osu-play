@@ -35,7 +35,8 @@ async function loadRealmDependencies() {
       [
         "Realm native bindings could not be loaded.",
         `Current Node runtime: ${process.version}.`,
-        "If you installed dependencies on Node 22, switch to Node 20 LTS and run `npm rebuild realm --foreground-scripts`.",
+        "To repair Realm bindings in this project, run `bun run repair:realm` (or `bun run setup` to reinstall dependencies).",
+        "If you installed dependencies on Node 22, switch to Node 20 LTS and rerun the repair command.",
         `Original error: ${error instanceof Error ? error.message : String(error)}`,
       ].join("\n"),
       { cause: error },
