@@ -5,6 +5,7 @@ Play music from your osu!lazer beatmaps from the terminal.
 ## Requirements
 
 - Node.js `20+`
+- `mpv` available on your `PATH`
 - An osu!lazer install with beatmaps available locally
 
 If you're developing locally, Realm's native bindings are still the one awkward part of this stack. Use the repo's `setup` script so Bun install and the Realm repair step happen in the right order.
@@ -27,7 +28,7 @@ npx osu-play
 ### CLI
 
 ```bash
-# Play music interactively
+# Launch the TUI player
 osu-play
 
 # Export a playlist file
@@ -36,6 +37,22 @@ osu-play --exportPlaylist playlist.txt
 # Loop the playlist
 osu-play --loop
 ```
+
+### TUI Controls
+
+- `Up/Down` or `j/k`: Move through the playlist
+- `Enter`: Play the selected track
+- `Space`: Pause or resume playback
+- `n` / `p`: Next or previous track
+- `PageUp` / `PageDown`: Jump faster through the playlist
+- `l`: Toggle looping
+- `s`: Stop playback
+- `q`: Quit
+- `/`: Enter search mode
+- Type in search mode: Jump the selection by track title
+- `Backspace`: Edit the search query
+- `Enter`: Leave search mode and keep the current query
+- `Esc`: Leave search mode, or clear the current query outside search mode
 
 ### API
 
@@ -49,10 +66,10 @@ const db = await getLazerDB(realmPath);
 ## Options
 
 - `--reload, -r`: Deprecated and ignored
-- `--exportPlaylist`: Export the discovered track paths to a file
+- `--exportPlaylist`: Export the discovered track paths to a file instead of launching the TUI
 - `--osuDataDir, -d`: Override the osu!lazer data directory
 - `--configDir, -c`: Deprecated and ignored
-- `--loop, -l`: Restart from the beginning when the playlist ends
+- `--loop, -l`: Restart from the beginning when playback reaches the end
 - `--help, -h`: Show help
 
 ## Development
@@ -61,14 +78,16 @@ Bun `1.3+` is required only for development and contributing; it is not needed t
 
 ```bash
 bun run setup
-bun run dev -- --help
+bun run dev
 bun run check
 ```
 
 Useful day-to-day commands:
 
 ```bash
-bun run dev -- --help
+bun run dev
+bun run dev -- --loop
+bun run dev -- --exportPlaylist playlist.txt
 bun run test
 bun run package
 ```
@@ -79,6 +98,8 @@ If you hit a Realm native-binding error like `realm.node` missing or Node failin
 bun install
 bun run repair:realm
 ```
+
+If `osu-play` fails with an `mpv` startup or IPC error, make sure `mpv` is installed and available on your shell `PATH`.
 
 `bun run package` builds the distributable files and creates a local npm tarball with `bun pm pack`.
 
