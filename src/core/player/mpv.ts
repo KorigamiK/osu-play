@@ -26,6 +26,35 @@ type MpvResponse = {
   request_id?: number;
 };
 
+function getErrorCode(error: unknown) {
+  if (error && typeof error === "object" && "code" in error) {
+    const { code } = error as NodeJS.ErrnoException;
+    return typeof code === "string" ? code : null;
+  }
+
+  return null;
+}
+
+function isRetryableSocketError(error: unknown) {
+  const code = getErrorCode(error);
+  if (code) {
+    return (
+      code === "ENOENT"
+      || code === "ECONNREFUSED"
+      || code === "EPERM"
+      || code === "EACCES"
+    );
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("ENOENT")
+    || message.includes("ECONNREFUSED")
+    || message.includes("EPERM")
+    || message.includes("EACCES")
+  );
+}
+
 function createSocketPath() {
   const id = `osu-play-mpv-${process.pid}-${Date.now()}`;
   if (process.platform === "win32") {
@@ -54,6 +83,8 @@ export class MpvPlayerBackend implements PlayerBackend {
   private readonly listeners = new Set<PlayerBackendListener>();
 
   private readonly pendingCommands = new Map<number, PendingCommand>();
+
+  private idleActive = true;
 
   private process: ChildProcess | null = null;
 
@@ -113,26 +144,41 @@ export class MpvPlayerBackend implements PlayerBackend {
   async play(filePath: string) {
     await this.start();
 
+    const previousSnapshot = this.snapshot;
+
+    try {
+      await this.sendCommand(["loadfile", filePath, "replace"]);
+      await this.sendCommand(["set_property", "pause", false]);
+    } catch (error) {
+      this.snapshot = previousSnapshot;
+      this.emit({
+        snapshot: this.snapshot,
+        type: "state",
+      });
+      throw error;
+    }
+
     this.snapshot = {
       ...this.snapshot,
       currentPath: filePath,
-      durationSeconds: null,
       errorMessage: null,
-      status: "playing",
-      timePositionSeconds: 0,
+      status: this.idleActive ? "stopped" : "playing",
+      timePositionSeconds: this.snapshot.timePositionSeconds ?? 0,
     };
     this.emit({
       snapshot: this.snapshot,
       type: "state",
     });
-
-    await this.sendCommand(["loadfile", filePath, "replace"]);
-    await this.sendCommand(["set_property", "pause", false]);
   }
 
   async togglePause() {
     await this.start();
     await this.sendCommand(["cycle", "pause"]);
+  }
+
+  async seekBy(seconds: number) {
+    await this.start();
+    await this.sendCommand(["seek", seconds, "relative"]);
   }
 
   async stop() {
@@ -141,6 +187,16 @@ export class MpvPlayerBackend implements PlayerBackend {
     }
 
     await this.sendCommand(["stop"]);
+    this.idleActive = true;
+    this.snapshot = {
+      ...this.snapshot,
+      status: "stopped",
+      timePositionSeconds: null,
+    };
+    this.emit({
+      snapshot: this.snapshot,
+      type: "state",
+    });
   }
 
   async dispose() {
@@ -231,13 +287,7 @@ export class MpvPlayerBackend implements PlayerBackend {
         await this.attachSocket();
         return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (
-          !message.includes("ENOENT")
-          && !message.includes("ECONNREFUSED")
-          && !message.includes("EPERM")
-          && !message.includes("EACCES")
-        ) {
+        if (!isRetryableSocketError(error)) {
           throw error;
         }
       }
@@ -377,7 +427,7 @@ export class MpvPlayerBackend implements PlayerBackend {
       case "pause":
         this.snapshot = {
           ...this.snapshot,
-          status: data === true ? "paused" : this.snapshot.status === "stopped" ? "playing" : "playing",
+          status: data === true ? "paused" : this.idleActive ? "stopped" : "playing",
         };
         break;
       case "time-pos":
@@ -393,9 +443,15 @@ export class MpvPlayerBackend implements PlayerBackend {
         };
         break;
       case "idle-active":
+        this.idleActive = data === true;
         this.snapshot = {
           ...this.snapshot,
-          status: data === true ? "stopped" : this.snapshot.status === "paused" ? "paused" : "playing",
+          status:
+            data === true
+              ? "stopped"
+              : this.snapshot.status === "paused"
+                ? "paused"
+                : "playing",
           timePositionSeconds:
             data === true ? this.snapshot.durationSeconds : this.snapshot.timePositionSeconds,
         };

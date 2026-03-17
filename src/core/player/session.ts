@@ -229,6 +229,24 @@ export class PlaylistPlayerSession {
     }
   }
 
+  async seekBy(seconds: number) {
+    if (seconds === 0) {
+      return;
+    }
+
+    const { status } = this.backend.getSnapshot();
+    if (status === "stopped") {
+      return;
+    }
+
+    try {
+      this.clearError();
+      await this.backend.seekBy(seconds);
+    } catch (error) {
+      this.reportError(error);
+    }
+  }
+
   async stop() {
     try {
       this.clearError();
