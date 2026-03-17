@@ -9,8 +9,8 @@ export class BeatmapSet extends Realm.Object<BeatmapSet> {
   DateAdded!: Date;
   DateSubmitted?: Date;
   DateRanked?: Date;
-  Beatmaps!: Array<Beatmap>;
-  Files!: Array<RealmNamedFileUsage>;
+  Beatmaps!: Realm.List<Beatmap>;
+  Files!: Realm.List<RealmNamedFileUsage>;
   Status!: number;
   DeletePending!: boolean;
   Hash?: string;

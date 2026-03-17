@@ -5,10 +5,7 @@ import { BeatmapMetadata } from "./beatmapMetadata.js";
 export class Beatmap extends Realm.Object<Beatmap> {
   ID!: string;
   DifficultyName?: string;
-  Ruleset!: any;
-  Difficulty!: any;
   Metadata!: BeatmapMetadata;
-  UserSettings!: any;
   BeatmapSet!: any;
   Status!: number;
   OnlineID!: number;
@@ -42,14 +39,11 @@ export class Beatmap extends Realm.Object<Beatmap> {
     properties: {
       ID: { type: "uuid", default: "" },
       DifficultyName: { type: "string", default: "", optional: true },
-      // Ruleset: { type: "object", objectType: "Ruleset", default: null },
-      // Difficulty: { type: "object", objectType: "BeatmapDifficulty", default: null },
       Metadata: {
         type: "object",
         objectType: "BeatmapMetadata",
         default: null,
       },
-      // UserSettings: { type: "object", objectType: "BeatmapUserSettings", default: null },
       BeatmapSet: { type: "object", objectType: "BeatmapSet", default: null },
       Status: { type: "int", default: -3 },
       OnlineID: { type: "int", default: -1 },
@@ -58,11 +52,7 @@ export class Beatmap extends Realm.Object<Beatmap> {
       Hash: { type: "string", default: "", optional: true },
       StarRating: { type: "double", default: -1 },
       MD5Hash: { type: "string", default: "", optional: true },
-      OnlineMD5Hash: {
-        type: "string",
-        default: "",
-        optional: true,
-      },
+      OnlineMD5Hash: { type: "string", default: "", optional: true },
       LastLocalUpdate: { type: "date", optional: true },
       LastOnlineUpdate: { type: "date", optional: true },
       Hidden: { type: "bool", default: false },

@@ -30,4 +30,3 @@ export class BeatmapMetadata extends Realm.Object<BeatmapMetadata> {
     },
   };
 }
-
