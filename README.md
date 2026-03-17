@@ -4,13 +4,13 @@ Play music from your osu!lazer beatmaps from the terminal.
 
 ## Requirements
 
-- Bun `1.3+`
 - Node.js `20+`
 - An osu!lazer install with beatmaps available locally
 
-Realm's native bindings are still the one awkward part of this stack. Use the repo's `setup` script so Bun install and the Realm repair step happen in the right order.
+If you're developing locally, Realm's native bindings are still the one awkward part of this stack. Use the repo's `setup` script so Bun install and the Realm repair step happen in the right order.
 
 ## Installation
+
 
 ```bash
 npm install -g osu-play
@@ -56,6 +56,8 @@ const db = await getLazerDB(realmPath);
 - `--help, -h`: Show help
 
 ## Development
+
+Bun `1.3+` is required only for development and contributing; it is not needed to run the published CLI via `npm install -g` or `npx osu-play`.
 
 ```bash
 bun run setup
