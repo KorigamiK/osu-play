@@ -1,69 +1,89 @@
-<h1 align="center">
-	<br>
-  osu!play
-	<br>
+# osu-play
 
-[![NPM version](https://img.shields.io/npm/v/osu-play.svg?style=flat)](https://npmjs.org/package/osu-play)
-[![Downloads](https://badgen.net/npm/dt/osu-play)](https://www.npmjs.com/package/osu-play)
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](LICENSE)
+Play music from your osu!lazer beatmaps from the terminal.
 
-</h1>
+## Requirements
 
-> Listen to your favourite [osu!lazer](https://lazer.ppy.sh) beatmaps as a
-> spotify playlist from the terminal
+- Bun `1.3+`
+- Node.js `20+`
+- An osu!lazer install with beatmaps available locally
+
+Realm's native bindings are still the one awkward part of this stack. Use the repo's `setup` script so Bun install and the Realm repair step happen in the right order.
 
 ## Installation
 
-### Requirements
+```bash
+npm install -g osu-play
+```
 
-- [Node.js](https://nodejs.org/en/) (v18 or higher)
-- [osu!lazer](https://lazer.ppy.sh/home/download) with some beatmaps to listen
-  to 😉
-- That's it!
+Or run it without a global install:
 
-### Quick start
-
-- Try out the latest release without installing anything:
-
-  ```sh
-  npx osu-play # using npm
-  pnpm dlx osu-play # using pnpm
-  ```
-
-- Install the latest release globally:
-
-  ```sh
-  npm i -g osu-play # using npm
-  pnpm i -g osu-play # using pnpm
-  ```
+```bash
+npx osu-play
+```
 
 ## Usage
 
-The `osu-play` command can be used with the following options:
+### CLI
 
-```sh
-➜  korigamik git:(main) ✗ osu-play --help
-Play music from your osu!lazer beatmaps from the terminal
-Usage: osu-play [options]
+```bash
+# Play music interactively
+osu-play
 
-Options:
-      --help            Show help                                      [boolean]
-      --version         Show version number                            [boolean]
-  -r, --reload          Reload lazer database         [boolean] [default: false]
-      --exportPlaylist  Export playlist to a file                       [string]
-  -d, --osuDataDir      Osu!lazer data directory
-                            [string] [default: "/home/origami/.local/share/osu"]
-  -c, --configDir       Config directory
-                            [string] [default: "/home/origami/.config/osu-play"]
-  -l, --loop            Loop the playlist on end      [boolean] [default: false]
+# Export a playlist file
+osu-play --exportPlaylist playlist.txt
+
+# Loop the playlist
+osu-play --loop
 ```
 
-This package can be used as a library or as a cli application. To use the lazer
-database interaction in your applicatoins import the `osu-play` package and
-start using it!
+### API
 
 ```ts
-import { lazer } from "osu-play";
+import { getLazerDB, getRealmDBPath } from "osu-play";
 
-const realm = getLazerDB();
+const realmPath = getRealmDBPath({ osuDataDir: "/path/to/osu" });
+const db = await getLazerDB(realmPath);
 ```
+
+## Options
+
+- `--reload, -r`: Deprecated and ignored
+- `--exportPlaylist`: Export the discovered track paths to a file
+- `--osuDataDir, -d`: Override the osu!lazer data directory
+- `--configDir, -c`: Deprecated and ignored
+- `--loop, -l`: Restart from the beginning when the playlist ends
+- `--help, -h`: Show help
+
+## Development
+
+```bash
+bun run setup
+bun run dev -- --help
+bun run check
+```
+
+Useful day-to-day commands:
+
+```bash
+bun run dev -- --help
+bun run test
+bun run package
+```
+
+If you hit a Realm native-binding error like `realm.node` missing or Node failing to load Realm:
+
+```bash
+bun install
+bun run repair:realm
+```
+
+`bun run package` builds the distributable files and creates a local npm tarball with `bun pm pack`.
+
+osu-play now reads osu!lazer's live `client.realm` directly in read-only mode instead of copying it into a separate app directory.
+
+Standalone Bun executables are intentionally not part of the release flow right now. The current Realm dependency uses native bindings, and Bun's standalone executable support does not yet cover that path cleanly enough for this app.
+
+## License
+
+MIT
