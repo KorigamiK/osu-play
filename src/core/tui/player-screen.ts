@@ -19,6 +19,7 @@ const MIN_LIST_ROWS = 4;
 const RESERVED_ROWS = 6;
 const PAGE_SIZE = 10;
 const PENDING_G_TIMEOUT_MS = 400;
+const SEEK_SECONDS = 5;
 
 function style(text: string, code: string) {
   return `${code}${text}${RESET}`;
@@ -146,6 +147,16 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
+    if (matchesKey(data, Key.left) || matchesKey(data, "h")) {
+      void this.session.seekBy(-SEEK_SECONDS);
+      return;
+    }
+
+    if (matchesKey(data, Key.right) || matchesKey(data, "l")) {
+      void this.session.seekBy(SEEK_SECONDS);
+      return;
+    }
+
     if (
       matchesKey(data, Key.pageUp)
       || matchesKey(data, Key.ctrl("u"))
@@ -199,12 +210,12 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
-    if (matchesKey(data, "n") || matchesKey(data, Key.right)) {
+    if (matchesKey(data, "n")) {
       void this.session.playNext();
       return;
     }
 
-    if (matchesKey(data, "p") || matchesKey(data, Key.left)) {
+    if (matchesKey(data, "p")) {
       void this.session.playPrevious();
       return;
     }
@@ -214,7 +225,7 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
-    if (matchesKey(data, "l")) {
+    if (matchesKey(data, "r")) {
       this.session.toggleLoop();
       return;
     }
@@ -322,7 +333,7 @@ export class PlaylistPlayerScreen implements Component {
         style(
           this.searchMode
             ? "/ search | type to jump | backspace edit | enter keep | esc leave"
-            : "j/k wrap | gg/G bounds | C-u/C-d page | H/M/L viewport | / search | enter play | q quit",
+            : "h/l seek | j/k wrap | gg/G bounds | C-u/C-d page | H/M/L viewport | n/p track | r loop | / search",
           DIM,
         ),
         width,

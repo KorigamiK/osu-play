@@ -32,6 +32,7 @@ export interface PlayerBackend {
   dispose(): Promise<void>;
   getSnapshot(): PlayerBackendSnapshot;
   play(filePath: string): Promise<void>;
+  seekBy(seconds: number): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
   subscribe(listener: PlayerBackendListener): () => void;

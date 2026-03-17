@@ -41,11 +41,12 @@ osu-play --loop
 ### TUI Controls
 
 - `Up/Down` or `j/k`: Move through the playlist
+- `Left/Right` or `h/l`: Seek backward or forward by 5 seconds
 - `Enter`: Play the selected track
 - `Space`: Pause or resume playback
 - `n` / `p`: Next or previous track
 - `PageUp` / `PageDown`: Jump faster through the playlist
-- `l`: Toggle looping
+- `r`: Toggle looping
 - `s`: Stop playback
 - `q`: Quit
 - `/`: Enter search mode

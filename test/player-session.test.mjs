@@ -85,6 +85,20 @@ class FakeBackend {
     });
   };
 
+  seekBy = async (seconds) => {
+    this.snapshot = {
+      ...this.snapshot,
+      timePositionSeconds: Math.max(
+        0,
+        (this.snapshot.timePositionSeconds ?? 0) + seconds,
+      ),
+    };
+    this.emit({
+      snapshot: this.snapshot,
+      type: "state",
+    });
+  };
+
   emit = (event) => {
     for (const listener of this.listeners) {
       listener(event);
@@ -176,6 +190,25 @@ describe("player session", () => {
 
     session.clearSearch();
     expect(session.getSnapshot().searchQuery).toBe("");
+  });
+
+  test("seeks through the current track while playing", async () => {
+    const backend = new FakeBackend();
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Alpha"),
+        createTrack("2", "Beta"),
+      ],
+      backend,
+    );
+
+    await session.start();
+    await session.playSelected();
+    await session.seekBy(5);
+    expect(session.getSnapshot().timePositionSeconds).toBe(5);
+
+    await session.seekBy(-2);
+    expect(session.getSnapshot().timePositionSeconds).toBe(3);
   });
 
   test("wraps selection from the top to the end and back again", () => {
