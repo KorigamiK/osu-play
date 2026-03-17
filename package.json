@@ -3,42 +3,72 @@
   "version": "1.0.7",
   "description": "Play music from your osu!lazer beatmaps from the terminal.",
   "type": "module",
-  "main": "bin/osu-play.js",
-  "module": "index.ts",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      },
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
-    "bin",
     "dist",
-    "src",
-    "index.ts",
-    "package.json",
     "README.md",
-    "tsconfig.json",
     "LICENSE"
   ],
   "bin": {
-    "osu-play": "./bin/osu-play.js"
+    "osu-play": "./dist/cli.cjs"
+  },
+  "sideEffects": false,
+  "packageManager": "bun@1.3.5",
+  "engines": {
+    "node": ">=20"
+  },
+  "trustedDependencies": [
+    "realm"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsup",
-    "start": "./bin/osu-play.js",
-    "dev:start": "tsc && ./bin/osu-play.js",
-    "clean": "rm -rf dist"
+    "setup": "bun install && bun run repair:realm",
+    "build": "bun run scripts/build.mjs",
+    "dev": "bun run build && node dist/cli.cjs",
+    "repair:realm": "bun run scripts/repair-realm.mjs",
+    "test": "bun run build && bun test",
+    "typecheck": "bun x tsc --project tsconfig.json --noEmit",
+    "lint": "eslint --config eslint.config.mjs src scripts test",
+    "package": "bun run build && bun pm pack --quiet",
+    "check": "bun run typecheck && bun run lint && bun run test && bun pm pack --dry-run && bun run scripts/run-with-local-tmp.mjs bun x publint && bun run scripts/run-with-local-tmp.mjs bun x attw --pack .",
+    "prepublishOnly": "bun run check"
   },
   "author": "KorigamiK",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.8.9",
-    "@types/prompts": "^2.4.7",
-    "tsup": "^8.0.2",
-    "typescript": "^5.2.2"
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "@types/prompts": "^2.4.9",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
+    "publint": "^0.3.18",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.0"
   },
   "dependencies": {
-    "@types/yargs": "^17.0.32",
+    "@types/yargs": "^17.0.35",
     "prompts": "^2.4.2",
-    "realm": "^12.2.1",
-    "yargs": "^17.7.2"
+    "realm": "^20.2.0",
+    "yargs": "^18.0.0"
   },
   "keywords": [
     "osu",
@@ -50,7 +80,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/KorigamiK/osu-play"
+    "url": "git+https://github.com/KorigamiK/osu-play.git"
   },
   "bugs": "https://github.com/KorigamiK/osu-play/issues"
 }
