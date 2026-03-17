@@ -44,6 +44,29 @@ function canLoadRealm() {
   return result.status === 0;
 }
 
+function printCapturedOutput(result) {
+  const stdout = result.stdout?.trim();
+  const stderr = result.stderr?.trim();
+
+  if (stdout) {
+    console.log(stdout);
+  }
+
+  if (stderr) {
+    console.error(stderr);
+  }
+}
+
+function isIgnorableRealmAnalyticsNoise(result) {
+  const stderr = result.stderr ?? "";
+
+  return (
+    stderr.includes("node ./scripts/submit-analytics.js") &&
+    stderr.includes("dependencies.yml") &&
+    stderr.includes("Error: ENOENT")
+  );
+}
+
 if (!forceRepair && canLoadRealm()) {
   console.log("[realm] Native bindings already look healthy.");
   process.exit(0);
@@ -57,7 +80,7 @@ const rebuild = spawnSync(
   ["-y", "node@20", npmPath, "rebuild", "realm", "--foreground-scripts"],
   {
     cwd: process.cwd(),
-    stdio: "inherit",
+    encoding: "utf8",
     env: {
       ...process.env,
       REALM_DISABLE_ANALYTICS: "1",
@@ -66,10 +89,19 @@ const rebuild = spawnSync(
 );
 
 if (rebuild.status !== 0) {
+  printCapturedOutput(rebuild);
   process.exit(rebuild.status ?? 1);
 }
 
+if (!isIgnorableRealmAnalyticsNoise(rebuild)) {
+  printCapturedOutput(rebuild);
+}
+
 if (!canLoadRealm()) {
+  if (isIgnorableRealmAnalyticsNoise(rebuild)) {
+    printCapturedOutput(rebuild);
+  }
+
   console.error("[realm] Repair completed, but Node still cannot load Realm.");
   process.exit(1);
 }
