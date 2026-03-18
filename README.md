@@ -1,6 +1,16 @@
-# osu-play
+<h1 align="center">
+	<br>
+  osu!play
+	<br>
 
-Play music from your osu!lazer beatmaps from the terminal.
+[![NPM version](https://img.shields.io/npm/v/osu-play.svg?style=flat)](https://npmjs.org/package/osu-play)
+[![Downloads](https://badgen.net/npm/dt/osu-play)](https://www.npmjs.com/package/osu-play)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](LICENSE)
+
+</h1>
+
+> Listen to your favourite [osu!lazer](https://lazer.ppy.sh) beatmaps as a
+> spotify playlist from the terminal
 
 ## Requirements
 
