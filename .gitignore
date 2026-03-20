@@ -135,3 +135,4 @@ package-lock.json
 .vscode/settings.json
 deno.lock
 deno.jsonc
+AGENTS.md
