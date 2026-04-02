@@ -11,6 +11,9 @@ import {
 
 function createTrack(id, title) {
   return {
+    beatmapSetHash: `set-hash-${id}`,
+    beatmapSetId: `set-${id}`,
+    beatmapSetKey: `set-${id}`,
     hash: `hash-${id}`,
     path: `/osu/${id}.mp3`,
     title,
@@ -228,6 +231,37 @@ describe("player session", () => {
     session.moveSelection(1);
     expect(session.getSnapshot().selectedIndex).toBe(0);
   });
+
+  test("deletes the selected beatmap set after confirmation-safe session wiring", async () => {
+    const backend = new FakeBackend();
+    const deletedTracks = [];
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Alpha"),
+        createTrack("2", "Beta"),
+        createTrack("3", "Gamma"),
+      ],
+      backend,
+      {
+        deleteTrack: async (track) => {
+          deletedTracks.push(track.title);
+        },
+        reloadPlaylist: async () => [
+          createTrack("2", "Beta"),
+          createTrack("3", "Gamma"),
+        ],
+      },
+    );
+
+    await session.deleteSelectedTrack();
+
+    expect(deletedTracks).toEqual(["Alpha"]);
+    expect(session.getSnapshot().playlist.map((track) => track.title)).toEqual([
+      "Beta",
+      "Gamma",
+    ]);
+    expect(session.getSnapshot().selectedIndex).toBe(0);
+  });
 });
 
 describe("player screen helpers", () => {
@@ -268,5 +302,56 @@ describe("player screen helpers", () => {
     screen.handleInput("\x1b");
     screen.handleInput("m");
     expect(session.getSnapshot().searchQuery).toBe("ga");
+  });
+
+  test("requires a second confirmation key before deleting a beatmap set", async () => {
+    const backend = new FakeBackend();
+    let deleteCalls = 0;
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Alpha"),
+        createTrack("2", "Beta"),
+      ],
+      backend,
+      {
+        deleteTrack: async () => {
+          deleteCalls += 1;
+        },
+        reloadPlaylist: async () => [createTrack("2", "Beta")],
+      },
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("d");
+    expect(deleteCalls).toBe(0);
+
+    screen.handleInput("d");
+    await Promise.resolve();
+    expect(deleteCalls).toBe(1);
+  });
+
+  test("cancels beatmap deletion when the confirmation key is not repeated", () => {
+    const backend = new FakeBackend();
+    let deleteCalls = 0;
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Alpha"),
+        createTrack("2", "Beta"),
+      ],
+      backend,
+      {
+        deleteTrack: async () => {
+          deleteCalls += 1;
+        },
+        reloadPlaylist: async () => [createTrack("2", "Beta")],
+      },
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("d");
+    screen.handleInput("j");
+
+    expect(deleteCalls).toBe(0);
+    expect(session.getSnapshot().selectedIndex).toBe(0);
   });
 });
