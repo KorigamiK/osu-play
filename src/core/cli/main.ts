@@ -5,7 +5,7 @@ import { ProcessTerminal, TUI } from "@mariozechner/pi-tui";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import { buildPlaylist } from "../playlist/mod.js";
+import { buildPlaylist, type PlaylistTrack } from "../playlist/mod.js";
 import { MpvPlayerBackend, PlaylistPlayerSession } from "../player/mod.js";
 import { PlaylistPlayerScreen } from "../tui/player-screen.js";
 import { getDefaultOsuDataDir, getRealmDBPath } from "../utils/mod.js";
@@ -104,12 +104,25 @@ async function createPlaylist(osuDataDir: string) {
   }
 }
 
+async function deleteTrackFromCollection(
+  track: PlaylistTrack,
+  osuDataDir: string,
+) {
+  const { deleteBeatmapSet } = await loadRealmDependencies();
+  await deleteBeatmapSet(track, osuDataDir);
+}
+
 async function runTuiPlayer(
   playlist: Awaited<ReturnType<typeof createPlaylist>>,
+  osuDataDir: string,
   loop: boolean,
 ) {
   const backend = new MpvPlayerBackend();
-  const session = new PlaylistPlayerSession(playlist, backend, { loop });
+  const session = new PlaylistPlayerSession(playlist, backend, {
+    deleteTrack: (track) => deleteTrackFromCollection(track, osuDataDir),
+    loop,
+    reloadPlaylist: () => createPlaylist(osuDataDir),
+  });
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal);
   const screen = new PlaylistPlayerScreen(session, () => terminal.rows);
@@ -177,5 +190,5 @@ export async function main() {
     return;
   }
 
-  await runTuiPlayer(playlist, argv.loop);
+  await runTuiPlayer(playlist, argv.osuDataDir, argv.loop);
 }

@@ -20,11 +20,17 @@ export type PlaylistFile = {
 };
 
 export type PlaylistBeatmapSet = {
+  DeletePending?: boolean;
   Beatmaps: Iterable<PlaylistBeatmap>;
   Files: Iterable<PlaylistFile>;
+  Hash?: string | null;
+  ID?: unknown;
 };
 
 export type PlaylistTrack = {
+  beatmapSetHash: string | null;
+  beatmapSetId: unknown;
+  beatmapSetKey: string;
   hash: string;
   path: string;
   title: string;
@@ -59,6 +65,10 @@ export function buildPlaylist(
   const playlist: PlaylistTrack[] = [];
 
   for (const beatmapSet of beatmapSets) {
+    if (beatmapSet.DeletePending) {
+      continue;
+    }
+
     for (const beatmap of beatmapSet.Beatmaps) {
       const hash = getNamedFileHash(beatmap.Metadata.AudioFile ?? "", beatmapSet);
       if (!hash || seenHashes.has(hash)) {
@@ -67,6 +77,9 @@ export function buildPlaylist(
 
       seenHashes.add(hash);
       playlist.push({
+        beatmapSetHash: beatmapSet.Hash ?? null,
+        beatmapSetId: beatmapSet.ID,
+        beatmapSetKey: String(beatmapSet.ID ?? hash),
         hash,
         path: hashedFilePath(hash, osuDataDir),
         title: formatTrackTitle(beatmap.Metadata),

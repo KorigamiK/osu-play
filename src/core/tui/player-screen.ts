@@ -84,6 +84,8 @@ export function getVisibleTrackRange(
 }
 
 export class PlaylistPlayerScreen implements Component {
+  private deleteConfirmationTrackKey: string | null = null;
+
   private pendingGoToTop = false;
 
   private pendingGoToTopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +112,11 @@ export class PlaylistPlayerScreen implements Component {
   }
 
   handleInput(data: string) {
+    if (this.deleteConfirmationTrackKey !== null) {
+      this.handleDeleteConfirmationInput(data);
+      return;
+    }
+
     if (this.searchMode) {
       this.handleSearchInput(data);
       return;
@@ -205,6 +212,11 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
+    if (matchesKey(data, "d")) {
+      this.armDeleteConfirmation();
+      return;
+    }
+
     if (matchesKey(data, Key.space)) {
       void this.session.togglePause();
       return;
@@ -296,6 +308,16 @@ export class PlaylistPlayerScreen implements Component {
           width,
         ),
       );
+    } else if (this.deleteConfirmationTrackKey !== null) {
+      lines.push(
+        truncateToWidth(
+          style(
+            `delete selected beatmap set? enter/d/y confirm | any other key cancel`,
+            RED,
+          ),
+          width,
+        ),
+      );
     } else {
       lines.push("");
     }
@@ -333,7 +355,7 @@ export class PlaylistPlayerScreen implements Component {
         style(
           this.searchMode
             ? "/ search | type to jump | backspace edit | enter keep | esc leave"
-            : "h/l seek | j/k wrap | gg/G bounds | C-u/C-d page | H/M/L viewport | n/p track | r loop | / search",
+            : "h/l seek | j/k wrap | gg/G bounds | C-u/C-d page | H/M/L viewport | n/p track | d delete set | r loop | / search",
           DIM,
         ),
         width,
@@ -358,6 +380,33 @@ export class PlaylistPlayerScreen implements Component {
     }
 
     this.pendingGoToTop = false;
+  }
+
+  private armDeleteConfirmation() {
+    const selectedTrack = this.snapshot.playlist[this.snapshot.selectedIndex];
+    if (!selectedTrack) {
+      return;
+    }
+
+    this.deleteConfirmationTrackKey = selectedTrack.beatmapSetKey;
+  }
+
+  private clearDeleteConfirmation() {
+    this.deleteConfirmationTrackKey = null;
+  }
+
+  private handleDeleteConfirmationInput(data: string) {
+    if (
+      matchesKey(data, Key.enter)
+      || matchesKey(data, "d")
+      || matchesKey(data, "y")
+    ) {
+      this.clearDeleteConfirmation();
+      void this.session.deleteSelectedTrack();
+      return;
+    }
+
+    this.clearDeleteConfirmation();
   }
 
   private handleSearchInput(data: string) {

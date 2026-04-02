@@ -41,7 +41,9 @@ export function findTrackIndexByQuery(
 }
 
 type PlaylistPlayerSessionOptions = {
+  deleteTrack?: (track: PlaylistTrack) => Promise<void>;
   loop?: boolean;
+  reloadPlaylist?: () => Promise<PlaylistTrack[]>;
 };
 
 export class PlaylistPlayerSession {
@@ -53,7 +55,11 @@ export class PlaylistPlayerSession {
 
   private loop: boolean;
 
-  private readonly playlist: PlaylistTrack[];
+  private deleteTrack?: (track: PlaylistTrack) => Promise<void>;
+
+  private playlist: PlaylistTrack[];
+
+  private readonly reloadPlaylist?: () => Promise<PlaylistTrack[]>;
 
   private searchQuery = "";
 
@@ -69,7 +75,9 @@ export class PlaylistPlayerSession {
     options: PlaylistPlayerSessionOptions = {},
   ) {
     this.playlist = playlist;
+    this.deleteTrack = options.deleteTrack;
     this.loop = options.loop ?? false;
+    this.reloadPlaylist = options.reloadPlaylist;
     this.unsubscribeBackend = backend.subscribe((event) => {
       void this.handleBackendEvent(event);
     });
@@ -266,6 +274,57 @@ export class PlaylistPlayerSession {
       try {
         this.clearError();
         await this.backend.stop();
+      } catch (error) {
+        this.reportError(error);
+      }
+    });
+  }
+
+  async deleteSelectedTrack() {
+    const selectedIndex = this.selectedIndex;
+    await this.enqueueOperation(async () => {
+      const track = this.playlist[selectedIndex];
+      if (!track) {
+        return;
+      }
+
+      if (!this.deleteTrack || !this.reloadPlaylist) {
+        this.reportError(new Error("Beatmap deletion is unavailable in this session."));
+        return;
+      }
+
+      const currentTrack =
+        this.currentIndex !== null ? this.playlist[this.currentIndex] ?? null : null;
+      const deletingCurrentTrack =
+        currentTrack !== null && currentTrack.beatmapSetKey === track.beatmapSetKey;
+
+      try {
+        this.clearError();
+
+        if (deletingCurrentTrack) {
+          await this.backend.stop();
+          this.currentIndex = null;
+        }
+
+        await this.deleteTrack(track);
+        this.playlist = await this.reloadPlaylist();
+        this.selectedIndex = clampIndex(selectedIndex, this.playlist.length);
+
+        if (this.searchQuery) {
+          const matchedIndex = findTrackIndexByQuery(this.playlist, this.searchQuery);
+          if (matchedIndex !== -1) {
+            this.selectedIndex = matchedIndex;
+          }
+        }
+
+        if (!deletingCurrentTrack && currentTrack) {
+          const nextCurrentIndex = this.playlist.findIndex(
+            (playlistTrack) => playlistTrack.hash === currentTrack.hash,
+          );
+          this.currentIndex = nextCurrentIndex === -1 ? null : nextCurrentIndex;
+        }
+
+        this.emit();
       } catch (error) {
         this.reportError(error);
       }

@@ -8,10 +8,13 @@ import {
 
 function createBeatmapSet({ files, beatmaps }) {
   return {
+    DeletePending: false,
     Files: files,
     Beatmaps: beatmaps.map((metadata) => ({
       Metadata: metadata,
     })),
+    Hash: "set-hash",
+    ID: "set-id",
   };
 }
 
@@ -47,10 +50,36 @@ describe("playlist builder", () => {
 
     expect(playlist).toHaveLength(1);
     expect(playlist[0]).toEqual({
+      beatmapSetHash: "set-hash",
+      beatmapSetId: "set-id",
+      beatmapSetKey: "set-id",
       hash: "abc123",
       path: "/osu/files/a/ab/abc123",
       title: "Song - Artist",
     });
+  });
+
+  test("skips beatmap sets that are already pending deletion", () => {
+    const playlist = buildPlaylist(
+      [
+        {
+          ...createBeatmapSet({
+            files: [{ Filename: "audio.mp3", File: { Hash: "abc123" } }],
+            beatmaps: [
+              {
+                AudioFile: "audio.mp3",
+                Title: "Song",
+                Artist: "Artist",
+              },
+            ],
+          }),
+          DeletePending: true,
+        },
+      ],
+      "/osu",
+    );
+
+    expect(playlist).toEqual([]);
   });
 
   test("formats unicode metadata without repeating identical values", () => {
