@@ -59,6 +59,8 @@ export class PlaylistPlayerSession {
 
   private selectedIndex = 0;
 
+  private operationQueue: Promise<void> = Promise.resolve();
+
   private readonly unsubscribeBackend: () => void;
 
   constructor(
@@ -188,72 +190,86 @@ export class PlaylistPlayerSession {
   }
 
   async playSelected() {
-    await this.playIndex(this.selectedIndex);
+    const selectedIndex = this.selectedIndex;
+    await this.enqueueOperation(async () => {
+      await this.playIndex(selectedIndex);
+    });
   }
 
   async playNext() {
-    const nextIndex = this.getAdjacentIndex(1);
-    if (nextIndex === null) {
-      return;
-    }
+    await this.enqueueOperation(async () => {
+      const nextIndex = this.getAdjacentIndex(1);
+      if (nextIndex === null) {
+        return;
+      }
 
-    await this.playIndex(nextIndex);
+      await this.playIndex(nextIndex);
+    });
   }
 
   async playPrevious() {
-    const previousIndex = this.getAdjacentIndex(-1);
-    if (previousIndex === null) {
-      return;
-    }
+    await this.enqueueOperation(async () => {
+      const previousIndex = this.getAdjacentIndex(-1);
+      if (previousIndex === null) {
+        return;
+      }
 
-    await this.playIndex(previousIndex);
+      await this.playIndex(previousIndex);
+    });
   }
 
   async togglePause() {
-    if (this.playlist.length === 0) {
-      return;
-    }
+    const selectedIndex = this.selectedIndex;
+    await this.enqueueOperation(async () => {
+      if (this.playlist.length === 0) {
+        return;
+      }
 
-    const { status } = this.backend.getSnapshot();
-    if (status === "stopped") {
-      const restartIndex = this.currentIndex ?? this.selectedIndex;
-      await this.playIndex(restartIndex);
-      return;
-    }
+      const { status } = this.backend.getSnapshot();
+      if (status === "stopped") {
+        const restartIndex = this.currentIndex ?? selectedIndex;
+        await this.playIndex(restartIndex);
+        return;
+      }
 
-    try {
-      this.clearError();
-      await this.backend.togglePause();
-    } catch (error) {
-      this.reportError(error);
-    }
+      try {
+        this.clearError();
+        await this.backend.togglePause();
+      } catch (error) {
+        this.reportError(error);
+      }
+    });
   }
 
   async seekBy(seconds: number) {
-    if (seconds === 0) {
-      return;
-    }
+    await this.enqueueOperation(async () => {
+      if (seconds === 0) {
+        return;
+      }
 
-    const { status } = this.backend.getSnapshot();
-    if (status === "stopped") {
-      return;
-    }
+      const { status } = this.backend.getSnapshot();
+      if (status === "stopped") {
+        return;
+      }
 
-    try {
-      this.clearError();
-      await this.backend.seekBy(seconds);
-    } catch (error) {
-      this.reportError(error);
-    }
+      try {
+        this.clearError();
+        await this.backend.seekBy(seconds);
+      } catch (error) {
+        this.reportError(error);
+      }
+    });
   }
 
   async stop() {
-    try {
-      this.clearError();
-      await this.backend.stop();
-    } catch (error) {
-      this.reportError(error);
-    }
+    await this.enqueueOperation(async () => {
+      try {
+        this.clearError();
+        await this.backend.stop();
+      } catch (error) {
+        this.reportError(error);
+      }
+    });
   }
 
   reportError(error: unknown) {
@@ -317,7 +333,7 @@ export class PlaylistPlayerSession {
     return nextIndex;
   }
 
-  private async handleBackendEvent(event: PlayerBackendEvent) {
+  private handleBackendEvent(event: PlayerBackendEvent) {
     switch (event.type) {
       case "state":
         this.emit();
@@ -326,16 +342,24 @@ export class PlaylistPlayerSession {
         this.reportError(event.error);
         return;
       case "ended":
-        if (event.reason === "eof") {
-          const nextIndex = this.getAdjacentIndex(1);
-          if (nextIndex !== null) {
-            await this.playIndex(nextIndex);
-            return;
+        void this.enqueueOperation(async () => {
+          if (event.reason === "eof") {
+            const nextIndex = this.getAdjacentIndex(1);
+            if (nextIndex !== null) {
+              await this.playIndex(nextIndex);
+              return;
+            }
           }
-        }
 
-        this.emit();
+          this.emit();
+        });
     }
+  }
+
+  private enqueueOperation(operation: () => Promise<void>) {
+    const queuedOperation = this.operationQueue.then(operation, operation);
+    this.operationQueue = queuedOperation.catch(() => {});
+    return queuedOperation;
   }
 
   private syncSelectionToSearch() {
