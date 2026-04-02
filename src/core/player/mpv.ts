@@ -158,11 +158,12 @@ export class MpvPlayerBackend implements PlayerBackend {
       throw error;
     }
 
+    this.idleActive = false;
     this.snapshot = {
       ...this.snapshot,
       currentPath: filePath,
       errorMessage: null,
-      status: this.idleActive ? "stopped" : "playing",
+      status: "playing",
       timePositionSeconds: this.snapshot.timePositionSeconds ?? 0,
     };
     this.emit({
@@ -406,17 +407,21 @@ export class MpvPlayerBackend implements PlayerBackend {
     }
 
     if (response.event === "end-file") {
-      this.snapshot = {
-        ...this.snapshot,
-        status: "stopped",
-        timePositionSeconds: this.snapshot.durationSeconds,
-      };
+      const reason = response.reason ?? "unknown";
+      if (reason !== "stop" && reason !== "redirect") {
+        this.snapshot = {
+          ...this.snapshot,
+          status: "stopped",
+          timePositionSeconds:
+            reason === "eof" ? this.snapshot.durationSeconds : this.snapshot.timePositionSeconds,
+        };
+        this.emit({
+          snapshot: this.snapshot,
+          type: "state",
+        });
+      }
       this.emit({
-        snapshot: this.snapshot,
-        type: "state",
-      });
-      this.emit({
-        reason: response.reason ?? "unknown",
+        reason,
         type: "ended",
       });
     }
