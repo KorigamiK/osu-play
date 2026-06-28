@@ -1,7 +1,7 @@
 import path from "node:path";
 import { writeFileSync } from "node:fs";
 
-import { ProcessTerminal, TUI } from "@mariozechner/pi-tui";
+import { ProcessTerminal, TUI } from "@earendil-works/pi-tui";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
