@@ -13,7 +13,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -57,17 +57,19 @@ jobs:
               core.info(`Waiting for CI on main to finish for ${sha}...`);
               await new Promise((resolve) => setTimeout(resolve, intervalMs));
             }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.5"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22.22.1"
           registry-url: "https://registry.npmjs.org"
       - run: bun install --frozen-lockfile
       - run: bun run repair:realm
-      - run: bun run check
+      # `npm publish` runs `prepublishOnly` (bun run check), and this job already
+      # waits for the CI run on the same commit to pass, so a separate check here
+      # would be redundant.
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
