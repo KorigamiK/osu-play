@@ -13,16 +13,40 @@ const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
 const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
+const BOLD = "\x1b[1m";
 const INVERSE = "\x1b[7m";
 
 const MIN_LIST_ROWS = 4;
-const RESERVED_ROWS = 6;
+const RESERVED_ROWS = 5;
 const PAGE_SIZE = 10;
 const PENDING_G_TIMEOUT_MS = 400;
 const SEEK_SECONDS = 5;
 
+const STATUS_GLYPH: Record<string, string> = {
+  paused: "⏸",
+  playing: "▶",
+  stopped: "■",
+};
+
 function style(text: string, code: string) {
   return `${code}${text}${RESET}`;
+}
+
+function progressBar(
+  position: number | null,
+  duration: number | null,
+  width: number,
+) {
+  const span = Math.max(4, width);
+  const ratio =
+    duration && duration > 0 && position !== null
+      ? Math.max(0, Math.min(position / duration, 1))
+      : 0;
+  const filled = Math.round(ratio * span);
+
+  return (
+    style("━".repeat(filled), CYAN) + style("─".repeat(span - filled), DIM)
+  );
 }
 
 function padIndex(index: number, total: number) {
@@ -263,63 +287,69 @@ export class PlaylistPlayerScreen implements Component {
       listHeight,
     );
 
+    const position = formatSeconds(this.snapshot.timePositionSeconds);
+    const duration = formatSeconds(this.snapshot.durationSeconds);
+    const glyph = STATUS_GLYPH[this.snapshot.status] ?? "·";
+    const isIdle = this.snapshot.currentTrack === null;
+    const nowPlaying = `${glyph}  ${
+      this.snapshot.currentTrack?.title ?? "nothing playing"
+    }`;
+    const barWidth = Math.max(
+      4,
+      width - position.length - duration.length - 2,
+    );
+
     const lines: string[] = [
       truncateToWidth(
-        `osu-play | tracks ${playlist.length} | backend ${this.snapshot.backendName} | loop ${
-          this.snapshot.loop ? "on" : "off"
-        }`,
+        isIdle ? style(nowPlaying, DIM) : style(nowPlaying, BOLD + CYAN),
         width,
       ),
       truncateToWidth(
-        style(
-          `now ${this.snapshot.status}: ${
-            this.snapshot.currentTrack?.title ?? "nothing selected"
-          }`,
-          CYAN,
-        ),
-        width,
-      ),
-      truncateToWidth(
-        style(
-          `${formatSeconds(this.snapshot.timePositionSeconds)} / ${formatSeconds(
-            this.snapshot.durationSeconds,
-          )} | selected ${this.snapshot.selectedIndex + 1}/${Math.max(
-            playlist.length,
-            1,
-          )}${
-            this.snapshot.searchQuery
-              ? ` | search "${this.snapshot.searchQuery}"${
-                  this.searchMode ? " [input]" : ""
-                }`
-              : this.searchMode
-                ? " | search [input]"
-              : ""
-          }`,
-          DIM,
-        ),
+        `${style(position, DIM)} ${progressBar(
+          this.snapshot.timePositionSeconds,
+          this.snapshot.durationSeconds,
+          barWidth,
+        )} ${style(duration, DIM)}`,
         width,
       ),
     ];
 
     if (this.snapshot.errorMessage) {
       lines.push(
-        truncateToWidth(
-          style(`error: ${this.snapshot.errorMessage}`, RED),
-          width,
-        ),
+        truncateToWidth(style(`✗  ${this.snapshot.errorMessage}`, RED), width),
       );
     } else if (this.deleteConfirmationTrackKey !== null) {
       lines.push(
         truncateToWidth(
+          style("delete this beatmap set?  enter/d/y confirm · any key cancel", RED),
+          width,
+        ),
+      );
+    } else if (this.searchMode || this.snapshot.searchQuery) {
+      lines.push(
+        truncateToWidth(
           style(
-            `delete selected beatmap set? enter/d/y confirm | any other key cancel`,
-            RED,
+            `/ ${this.snapshot.searchQuery}${this.searchMode ? "▏" : ""}`,
+            CYAN,
           ),
           width,
         ),
       );
     } else {
-      lines.push("");
+      lines.push(
+        truncateToWidth(
+          style(
+            `${this.snapshot.selectedIndex + 1}/${Math.max(
+              playlist.length,
+              1,
+            )} · loop ${this.snapshot.loop ? "on" : "off"} · ${
+              this.snapshot.backendName
+            }`,
+            DIM,
+          ),
+          width,
+        ),
+      );
     }
 
     if (playlist.length === 0) {
@@ -335,11 +365,15 @@ export class PlaylistPlayerScreen implements Component {
 
         const isCurrent = index === this.snapshot.currentIndex;
         const isSelected = index === this.snapshot.selectedIndex;
-        const prefix = `${isSelected ? ">" : " "} ${isCurrent ? "*" : " "} `;
-        const line = `${prefix}${padIndex(index, playlist.length)}. ${track.title}`;
+        const marker = isCurrent ? "▶" : " ";
+        const line = ` ${marker}  ${padIndex(index, playlist.length)}  ${track.title}`;
         lines.push(
           truncateToWidth(
-            isSelected ? style(line, INVERSE) : line,
+            isSelected
+              ? style(line, INVERSE)
+              : isCurrent
+                ? style(line, CYAN)
+                : line,
             width,
           ),
         );
@@ -354,8 +388,8 @@ export class PlaylistPlayerScreen implements Component {
       truncateToWidth(
         style(
           this.searchMode
-            ? "/ search | type to jump | backspace edit | enter keep | esc leave"
-            : "h/l seek | j/k wrap | gg/G bounds | C-u/C-d page | H/M/L viewport | n/p track | d delete set | r loop | / search",
+            ? "type to jump · backspace edit · enter keep · esc leave"
+            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · r loop · d delete · / search · q quit",
           DIM,
         ),
         width,
