@@ -4,7 +4,7 @@ import {
   Key,
   matchesKey,
   truncateToWidth,
-} from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-tui";
 
 import type { PlaylistPlayerSession } from "../player/mod.js";
 import type { PlaylistPlayerSnapshot } from "../player/types.js";
