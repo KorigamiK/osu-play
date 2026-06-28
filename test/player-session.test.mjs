@@ -173,6 +173,52 @@ describe("player session", () => {
     expect(snapshot.status).toBe("playing");
   });
 
+  test("n/p wrap around the playlist even when looping is disabled", async () => {
+    const backend = new FakeBackend();
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "First"),
+        createTrack("2", "Second"),
+      ],
+      backend,
+    );
+
+    await session.start();
+    session.selectEnd();
+    await session.playSelected();
+    expect(session.getSnapshot().currentIndex).toBe(1);
+
+    await session.playNext();
+    expect(session.getSnapshot().currentIndex).toBe(0);
+
+    await session.playPrevious();
+    expect(session.getSnapshot().currentIndex).toBe(1);
+  });
+
+  test("eof does not wrap when looping is disabled", async () => {
+    const backend = new FakeBackend();
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "First"),
+        createTrack("2", "Second"),
+      ],
+      backend,
+    );
+
+    await session.start();
+    session.selectEnd();
+    await session.playSelected();
+
+    backend.emit({
+      reason: "eof",
+      type: "ended",
+    });
+    await Promise.resolve();
+
+    const snapshot = session.getSnapshot();
+    expect(snapshot.currentIndex).toBe(1);
+  });
+
   test("updates selection from the jump query", () => {
     const backend = new FakeBackend();
     const session = new PlaylistPlayerSession(

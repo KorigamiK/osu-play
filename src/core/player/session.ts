@@ -206,7 +206,7 @@ export class PlaylistPlayerSession {
 
   async playNext() {
     await this.enqueueOperation(async () => {
-      const nextIndex = this.getAdjacentIndex(1);
+      const nextIndex = this.getAdjacentIndex(1, true);
       if (nextIndex === null) {
         return;
       }
@@ -217,7 +217,7 @@ export class PlaylistPlayerSession {
 
   async playPrevious() {
     await this.enqueueOperation(async () => {
-      const previousIndex = this.getAdjacentIndex(-1);
+      const previousIndex = this.getAdjacentIndex(-1, true);
       if (previousIndex === null) {
         return;
       }
@@ -370,23 +370,27 @@ export class PlaylistPlayerSession {
       return;
     }
 
+    // Keep the cursor on the track that is now playing so n/p (and
+    // auto-advance) move the selection along with playback.
+    this.selectedIndex = index;
     this.emit();
   }
 
-  private getAdjacentIndex(delta: number) {
+  private getAdjacentIndex(delta: number, wrap = false) {
     if (this.playlist.length === 0) {
       return null;
     }
 
     const baseIndex = this.currentIndex ?? this.selectedIndex;
     const nextIndex = baseIndex + delta;
+    const shouldWrap = wrap || this.loop;
 
     if (nextIndex < 0) {
-      return this.loop ? this.playlist.length - 1 : null;
+      return shouldWrap ? this.playlist.length - 1 : null;
     }
 
     if (nextIndex >= this.playlist.length) {
-      return this.loop ? 0 : null;
+      return shouldWrap ? 0 : null;
     }
 
     return nextIndex;
