@@ -1,70 +1,30 @@
 #!/usr/bin/env bun
 
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 
 const forceRepair = process.argv.includes("--force");
-const isWindows = process.platform === "win32";
-const npxCommand = isWindows ? "npx.cmd" : "npx";
-const resolverCommand = isWindows ? "where.exe" : "which";
-const npmCommand = isWindows ? "npm.cmd" : "npm";
 
-function run(command, args, options = {}) {
-  return spawnSync(command, args, {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    env: process.env,
-    ...options,
-  });
-}
-
-function resolveNpmPath() {
-  const result = run(resolverCommand, [npmCommand]);
-  if (result.status !== 0) {
-    throw new Error("Could not find `npm` on PATH.");
-  }
-
-  const npmPath = result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-
-  if (!npmPath) {
-    throw new Error("Could not resolve the npm executable path.");
-  }
-
-  return npmPath;
-}
+// Realm ships its native binding as a Node-API (N-API) prebuilt binary. N-API
+// binaries are ABI-stable across Node versions, so the one binary works on every
+// supported runtime (Node 20 through the latest). The only catch is that Bun's
+// `install` does not run Realm's lifecycle script successfully — Realm's
+// `prebuild-install --runtime napi` invocation can't infer the N-API target and
+// silently bails (`|| echo 'Failed to download prebuild for Realm'`), leaving
+// `prebuilds/node/realm.node` missing. This script fetches that binary directly.
 
 function canLoadRealm() {
-  const result = run("node", [
-    "-e",
-    "const Realm = require('realm'); if (typeof Realm.shutdown === 'function') Realm.shutdown(); console.log('realm-ok');",
-  ]);
+  const result = spawnSync(
+    "node",
+    [
+      "-e",
+      "const Realm = require('realm'); if (typeof Realm.shutdown === 'function') Realm.shutdown(); console.log('realm-ok');",
+    ],
+    { cwd: process.cwd(), encoding: "utf8", env: process.env },
+  );
 
   return result.status === 0;
-}
-
-function printCapturedOutput(result) {
-  const stdout = result.stdout?.trim();
-  const stderr = result.stderr?.trim();
-
-  if (stdout) {
-    console.log(stdout);
-  }
-
-  if (stderr) {
-    console.error(stderr);
-  }
-}
-
-function isIgnorableRealmAnalyticsNoise(result) {
-  const stderr = result.stderr ?? "";
-
-  return (
-    stderr.includes("node ./scripts/submit-analytics.js") &&
-    stderr.includes("dependencies.yml") &&
-    stderr.includes("Error: ENOENT")
-  );
 }
 
 if (!forceRepair && canLoadRealm()) {
@@ -72,37 +32,32 @@ if (!forceRepair && canLoadRealm()) {
   process.exit(0);
 }
 
-console.log("[realm] Repairing native bindings with a temporary Node 20 runtime...");
+const require = createRequire(import.meta.url);
+const realmDir = dirname(require.resolve("realm/package.json"));
+const prebuildInstallBin = createRequire(`${realmDir}/`).resolve(
+  "prebuild-install/bin.js",
+);
 
-const npmPath = resolveNpmPath();
-const rebuild = spawnSync(
-  npxCommand,
-  ["-y", "node@20", npmPath, "rebuild", "realm", "--foreground-scripts"],
+console.log("[realm] Downloading the N-API prebuilt binding for Realm...");
+
+const download = spawnSync(
+  process.execPath,
+  [prebuildInstallBin, "--runtime", "napi", "--target", "6"],
   {
-    cwd: process.cwd(),
+    cwd: realmDir,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      REALM_DISABLE_ANALYTICS: "1",
-    },
+    env: { ...process.env, REALM_DISABLE_ANALYTICS: "1" },
+    stdio: "inherit",
   },
 );
 
-if (rebuild.status !== 0) {
-  printCapturedOutput(rebuild);
-  process.exit(rebuild.status ?? 1);
-}
-
-if (!isIgnorableRealmAnalyticsNoise(rebuild)) {
-  printCapturedOutput(rebuild);
+if (download.status !== 0) {
+  console.error("[realm] Failed to download the Realm prebuilt binary.");
+  process.exit(download.status ?? 1);
 }
 
 if (!canLoadRealm()) {
-  if (isIgnorableRealmAnalyticsNoise(rebuild)) {
-    printCapturedOutput(rebuild);
-  }
-
-  console.error("[realm] Repair completed, but Node still cannot load Realm.");
+  console.error("[realm] Download completed, but Node still cannot load Realm.");
   process.exit(1);
 }
 
