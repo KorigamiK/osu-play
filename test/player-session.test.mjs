@@ -342,12 +342,13 @@ describe("player screen helpers", () => {
 
     screen.handleInput("/");
     screen.handleInput("g");
+    screen.handleInput(" ");
     screen.handleInput("a");
-    expect(session.getSnapshot().searchQuery).toBe("ga");
+    expect(session.getSnapshot().searchQuery).toBe("g a");
 
     screen.handleInput("\x1b");
     screen.handleInput("m");
-    expect(session.getSnapshot().searchQuery).toBe("ga");
+    expect(session.getSnapshot().searchQuery).toBe("g a");
   });
 
   test("requires a second confirmation key before deleting a beatmap set", async () => {
