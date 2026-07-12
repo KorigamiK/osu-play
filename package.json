@@ -1,6 +1,6 @@
 {
   "name": "osu-play",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Play music from your osu!lazer beatmaps from the terminal.",
   "type": "module",
   "main": "./dist/index.cjs",
