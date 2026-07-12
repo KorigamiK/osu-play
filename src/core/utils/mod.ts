@@ -1,5 +1,28 @@
 import path from "node:path";
 import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+
+export function revealFile(filePath: string) {
+  const command =
+    process.platform === "darwin"
+      ? { args: ["-R", filePath], executable: "open" }
+      : process.platform === "win32"
+        ? { args: ["/select,", filePath], executable: "explorer.exe" }
+        : { args: [path.dirname(filePath)], executable: "xdg-open" };
+
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command.executable, command.args, {
+      detached: true,
+      stdio: "ignore",
+    });
+
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+}
 
 export function getDataDir(): string | undefined {
   switch (process.platform) {

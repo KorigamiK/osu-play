@@ -54,15 +54,17 @@ osu-play --loop
 - `Left/Right` or `h/l`: Seek backward or forward by 5 seconds
 - `Enter`: Play the selected track
 - `Space`: Pause or resume playback
+- `o`: Reveal the selected track in the native file manager
 - `n` / `p`: Next or previous track
 - `PageUp` / `PageDown`: Jump faster through the playlist
 - `r`: Toggle looping
 - `s`: Stop playback
 - `q`: Quit
 - `/`: Enter search mode
-- Type in search mode: Jump the selection by track title
+- Type in search mode: Filter tracks by title
+- `Up`/`Down` or `Ctrl+P`/`Ctrl+N` in search mode: Navigate matching tracks
 - `Backspace`: Edit the search query
-- `Enter`: Leave search mode and keep the current query
+- `Enter` in search mode: Play the selected match, leave search entry, and keep the filter
 - `Esc`: Leave search mode, or clear the current query outside search mode
 
 ### API
