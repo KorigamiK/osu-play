@@ -470,7 +470,7 @@ export class PlaylistPlayerScreen implements Component {
     }
 
     const printable = decodePrintableText(data);
-    if (!printable || printable === " ") {
+    if (!printable) {
       return;
     }
 
