@@ -117,11 +117,13 @@ async function runTuiPlayer(
   osuDataDir: string,
   loop: boolean,
 ) {
+  const { revealFile } = await import("../utils/mod.js");
   const backend = new MpvPlayerBackend();
   const session = new PlaylistPlayerSession(playlist, backend, {
     deleteTrack: (track) => deleteTrackFromCollection(track, osuDataDir),
     loop,
     reloadPlaylist: () => createPlaylist(osuDataDir),
+    revealTrack: (track) => revealFile(track.path),
   });
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal);

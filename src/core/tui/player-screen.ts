@@ -7,6 +7,7 @@ import {
 } from "@earendil-works/pi-tui";
 
 import type { PlaylistPlayerSession } from "../player/mod.js";
+import { findTrackIndicesByQuery } from "../player/mod.js";
 import type { PlaylistPlayerSnapshot } from "../player/types.js";
 
 const RESET = "\x1b[0m";
@@ -266,6 +267,11 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
+    if (matchesKey(data, "o")) {
+      void this.session.revealSelectedTrack();
+      return;
+    }
+
     if (matchesKey(data, Key.backspace)) {
       this.session.deleteSearchCharacter();
       return;
@@ -279,11 +285,18 @@ export class PlaylistPlayerScreen implements Component {
 
   render(width: number) {
     const { playlist } = this.snapshot;
+    const visibleIndices = this.snapshot.searchQuery
+      ? findTrackIndicesByQuery(playlist, this.snapshot.searchQuery)
+      : playlist.map((_, index) => index);
+    const selectedVisibleIndex = Math.max(
+      0,
+      visibleIndices.indexOf(this.snapshot.selectedIndex),
+    );
     const viewportHeight = Math.max(this.getViewportHeight(), RESERVED_ROWS);
     const listHeight = this.getListHeight(viewportHeight);
     const { start, end } = getVisibleTrackRange(
-      this.snapshot.selectedIndex,
-      playlist.length,
+      selectedVisibleIndex,
+      visibleIndices.length,
       listHeight,
     );
 
@@ -356,8 +369,14 @@ export class PlaylistPlayerScreen implements Component {
       lines.push(
         truncateToWidth("No tracks were found in your osu!lazer library.", width),
       );
+    } else if (visibleIndices.length === 0) {
+      lines.push(truncateToWidth("No tracks match the current search.", width));
     } else {
-      for (let index = start; index < end; index += 1) {
+      for (let visibleIndex = start; visibleIndex < end; visibleIndex += 1) {
+        const index = visibleIndices[visibleIndex];
+        if (index === undefined) {
+          continue;
+        }
         const track = playlist[index];
         if (!track) {
           continue;
@@ -388,8 +407,8 @@ export class PlaylistPlayerScreen implements Component {
       truncateToWidth(
         style(
           this.searchMode
-            ? "type to jump · backspace edit · enter keep · esc leave"
-            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · r loop · d delete · / search · q quit",
+            ? "type to filter · ↑/↓ results · enter play · backspace edit · esc leave"
+            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · o reveal · r loop · d delete · / search · q quit",
           DIM,
         ),
         width,
@@ -451,6 +470,7 @@ export class PlaylistPlayerScreen implements Component {
 
     if (matchesKey(data, Key.enter)) {
       this.searchMode = false;
+      void this.session.playSelected();
       return;
     }
 
@@ -466,6 +486,16 @@ export class PlaylistPlayerScreen implements Component {
 
     if (matchesKey(data, Key.ctrl("u"))) {
       this.session.clearSearch();
+      return;
+    }
+
+    if (matchesKey(data, Key.up) || matchesKey(data, Key.ctrl("p"))) {
+      this.session.moveSearchSelection(-1);
+      return;
+    }
+
+    if (matchesKey(data, Key.down) || matchesKey(data, Key.ctrl("n"))) {
+      this.session.moveSearchSelection(1);
       return;
     }
 

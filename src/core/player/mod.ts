@@ -1,5 +1,9 @@
 export { MpvPlayerBackend } from "./mpv.js";
-export { findTrackIndexByQuery, PlaylistPlayerSession } from "./session.js";
+export {
+  findTrackIndexByQuery,
+  findTrackIndicesByQuery,
+  PlaylistPlayerSession,
+} from "./session.js";
 export type {
   PlayerBackend,
   PlayerBackendEvent,

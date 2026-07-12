@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   findTrackIndexByQuery,
+  findTrackIndicesByQuery,
   PlaylistPlayerSession,
 } from "../src/core/player/mod.ts";
 import {
@@ -119,6 +120,17 @@ describe("player session", () => {
     expect(findTrackIndexByQuery(playlist, "knights")).toBe(1);
     expect(findTrackIndexByQuery(playlist, "SNOW")).toBe(0);
     expect(findTrackIndexByQuery(playlist, "missing")).toBe(-1);
+  });
+
+  test("findTrackIndicesByQuery returns every matching track", () => {
+    const playlist = [
+      createTrack("1", "Blue Sky"),
+      createTrack("2", "Red Moon"),
+      createTrack("3", "Blue Moon"),
+    ];
+
+    expect(findTrackIndicesByQuery(playlist, "moon")).toEqual([1, 2]);
+    expect(findTrackIndicesByQuery(playlist, "blue moon")).toEqual([2]);
   });
 
   test("auto-advances to the next track on eof", async () => {
@@ -349,6 +361,78 @@ describe("player screen helpers", () => {
     screen.handleInput("\x1b");
     screen.handleInput("m");
     expect(session.getSnapshot().searchQuery).toBe("g a");
+  });
+
+  test("navigates between matching search results", () => {
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Blue Sky"),
+        createTrack("2", "Red Moon"),
+        createTrack("3", "Blue Moon"),
+      ],
+      new FakeBackend(),
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("/");
+    for (const character of "moon") screen.handleInput(character);
+    expect(session.getSnapshot().selectedIndex).toBe(1);
+
+    screen.handleInput("\x1b[B");
+    expect(session.getSnapshot().selectedIndex).toBe(2);
+
+    screen.handleInput("\x1b[B");
+    expect(session.getSnapshot().selectedIndex).toBe(1);
+    screen.setSnapshot(session.getSnapshot());
+    expect(screen.render(80).join("\n")).not.toContain("Blue Sky");
+  });
+
+  test("reveals the selected track with o outside search mode", async () => {
+    const revealedTracks = [];
+    const session = new PlaylistPlayerSession(
+      [createTrack("1", "Blue Sky")],
+      new FakeBackend(),
+      {
+        revealTrack: async (track) => revealedTracks.push(track.path),
+      },
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("o");
+    await Promise.resolve();
+    expect(revealedTracks).toEqual(["/osu/1.mp3"]);
+
+    screen.handleInput("/");
+    screen.handleInput("o");
+    expect(session.getSnapshot().searchQuery).toBe("o");
+    expect(revealedTracks).toEqual(["/osu/1.mp3"]);
+  });
+
+  test("plays a search result and keeps movement within retained matches", async () => {
+    const backend = new FakeBackend();
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "Moon One"),
+        createTrack("2", "Hidden Track"),
+        createTrack("3", "Moon Two"),
+      ],
+      backend,
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("/");
+    for (const character of "moon") screen.handleInput(character);
+    screen.handleInput("\x1b[B");
+    screen.handleInput("\r");
+    await Promise.resolve();
+
+    expect(session.getSnapshot().currentIndex).toBe(2);
+    expect(session.getSnapshot().searchQuery).toBe("moon");
+
+    screen.handleInput("k");
+    expect(session.getSnapshot().selectedIndex).toBe(0);
+    screen.handleInput("j");
+    expect(session.getSnapshot().selectedIndex).toBe(2);
   });
 
   test("requires a second confirmation key before deleting a beatmap set", async () => {

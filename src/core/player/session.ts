@@ -40,10 +40,25 @@ export function findTrackIndexByQuery(
   );
 }
 
+export function findTrackIndicesByQuery(
+  playlist: PlaylistTrack[],
+  query: string,
+) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return playlist.map((_, index) => index);
+  }
+
+  return playlist.flatMap((track, index) =>
+    normalizeSearchText(track.title).includes(normalizedQuery) ? [index] : [],
+  );
+}
+
 type PlaylistPlayerSessionOptions = {
   deleteTrack?: (track: PlaylistTrack) => Promise<void>;
   loop?: boolean;
   reloadPlaylist?: () => Promise<PlaylistTrack[]>;
+  revealTrack?: (track: PlaylistTrack) => Promise<void>;
 };
 
 export class PlaylistPlayerSession {
@@ -60,6 +75,8 @@ export class PlaylistPlayerSession {
   private playlist: PlaylistTrack[];
 
   private readonly reloadPlaylist?: () => Promise<PlaylistTrack[]>;
+
+  private readonly revealTrack?: (track: PlaylistTrack) => Promise<void>;
 
   private searchQuery = "";
 
@@ -78,6 +95,7 @@ export class PlaylistPlayerSession {
     this.deleteTrack = options.deleteTrack;
     this.loop = options.loop ?? false;
     this.reloadPlaylist = options.reloadPlaylist;
+    this.revealTrack = options.revealTrack;
     this.unsubscribeBackend = backend.subscribe((event) => {
       void this.handleBackendEvent(event);
     });
@@ -127,6 +145,11 @@ export class PlaylistPlayerSession {
       return;
     }
 
+    if (this.searchQuery) {
+      this.moveSearchSelection(delta);
+      return;
+    }
+
     this.selectedIndex = wrapIndex(
       this.selectedIndex + delta,
       this.playlist.length,
@@ -135,7 +158,24 @@ export class PlaylistPlayerSession {
   }
 
   moveSelectionPage(delta: number, pageSize: number) {
+    if (this.searchQuery) {
+      this.moveSearchSelection(delta * Math.max(1, pageSize));
+      return;
+    }
+
     this.moveSelection(delta * Math.max(1, pageSize));
+  }
+
+  moveSearchSelection(delta: number) {
+    const matches = findTrackIndicesByQuery(this.playlist, this.searchQuery);
+    if (matches.length === 0) {
+      return;
+    }
+
+    const currentMatchIndex = matches.indexOf(this.selectedIndex);
+    const nextMatchIndex = wrapIndex(currentMatchIndex + delta, matches.length);
+    this.selectedIndex = matches[nextMatchIndex] ?? this.selectedIndex;
+    this.emit();
   }
 
   selectHome() {
@@ -143,7 +183,8 @@ export class PlaylistPlayerSession {
       return;
     }
 
-    this.selectedIndex = 0;
+    const matches = findTrackIndicesByQuery(this.playlist, this.searchQuery);
+    this.selectedIndex = matches[0] ?? 0;
     this.emit();
   }
 
@@ -152,7 +193,8 @@ export class PlaylistPlayerSession {
       return;
     }
 
-    this.selectedIndex = this.playlist.length - 1;
+    const matches = findTrackIndicesByQuery(this.playlist, this.searchQuery);
+    this.selectedIndex = matches.at(-1) ?? this.playlist.length - 1;
     this.emit();
   }
 
@@ -278,6 +320,25 @@ export class PlaylistPlayerSession {
         this.reportError(error);
       }
     });
+  }
+
+  async revealSelectedTrack() {
+    const track = this.playlist[this.selectedIndex];
+    if (!track) {
+      return;
+    }
+
+    if (!this.revealTrack) {
+      this.reportError(new Error("Opening the containing folder is unavailable."));
+      return;
+    }
+
+    try {
+      this.clearError();
+      await this.revealTrack(track);
+    } catch (error) {
+      this.reportError(error);
+    }
   }
 
   async deleteSelectedTrack() {
