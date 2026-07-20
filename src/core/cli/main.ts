@@ -69,6 +69,12 @@ export function getArgs() {
       alias: "l",
       describe: "Loop the playlist when playback reaches the end",
     })
+    .option("shuffle", {
+      type: "boolean",
+      default: false,
+      alias: "s",
+      describe: "Play the playlist in shuffled order",
+    })
     .alias("help", "h")
     .help()
     .parse();
@@ -116,6 +122,7 @@ async function runTuiPlayer(
   playlist: Awaited<ReturnType<typeof createPlaylist>>,
   osuDataDir: string,
   loop: boolean,
+  shuffle: boolean,
 ) {
   const { revealFile } = await import("../utils/mod.js");
   const backend = new MpvPlayerBackend();
@@ -124,6 +131,7 @@ async function runTuiPlayer(
     loop,
     reloadPlaylist: () => createPlaylist(osuDataDir),
     revealTrack: (track) => revealFile(track.path),
+    shuffle,
   });
   const terminal = new ProcessTerminal();
   const tui = new TUI(terminal);
@@ -192,5 +200,5 @@ export async function main() {
     return;
   }
 
-  await runTuiPlayer(playlist, argv.osuDataDir, argv.loop);
+  await runTuiPlayer(playlist, argv.osuDataDir, argv.loop, argv.shuffle);
 }

@@ -267,6 +267,11 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
+    if (matchesKey(data, "x")) {
+      this.session.toggleShuffle();
+      return;
+    }
+
     if (matchesKey(data, "o")) {
       void this.session.revealSelectedTrack();
       return;
@@ -355,7 +360,9 @@ export class PlaylistPlayerScreen implements Component {
             `${this.snapshot.selectedIndex + 1}/${Math.max(
               playlist.length,
               1,
-            )} · loop ${this.snapshot.loop ? "on" : "off"} · ${
+            )} · loop ${this.snapshot.loop ? "on" : "off"} · shuffle ${
+              this.snapshot.shuffle ? "on" : "off"
+            } · ${
               this.snapshot.backendName
             }`,
             DIM,
@@ -407,8 +414,8 @@ export class PlaylistPlayerScreen implements Component {
       truncateToWidth(
         style(
           this.searchMode
-            ? "type to filter · ↑/↓ results · enter play · backspace edit · esc leave"
-            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · o reveal · r loop · d delete · / search · q quit",
+            ? "type to filter · ↑/↓ results · enter play · ctrl-w word · esc leave"
+            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · x shuffle · r loop · o reveal · d delete · / search · q quit",
           DIM,
         ),
         width,
@@ -481,6 +488,11 @@ export class PlaylistPlayerScreen implements Component {
 
     if (matchesKey(data, Key.backspace)) {
       this.session.deleteSearchCharacter();
+      return;
+    }
+
+    if (matchesKey(data, Key.ctrl("w"))) {
+      this.session.deleteSearchWord();
       return;
     }
 

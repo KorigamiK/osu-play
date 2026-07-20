@@ -49,6 +49,7 @@ export type PlaylistPlayerSnapshot = {
   playlist: PlaylistTrack[];
   searchQuery: string;
   selectedIndex: number;
+  shuffle: boolean;
   status: PlayerBackendStatus;
   timePositionSeconds: number | null;
 };

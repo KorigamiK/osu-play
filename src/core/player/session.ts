@@ -57,8 +57,10 @@ export function findTrackIndicesByQuery(
 type PlaylistPlayerSessionOptions = {
   deleteTrack?: (track: PlaylistTrack) => Promise<void>;
   loop?: boolean;
+  random?: () => number;
   reloadPlaylist?: () => Promise<PlaylistTrack[]>;
   revealTrack?: (track: PlaylistTrack) => Promise<void>;
+  shuffle?: boolean;
 };
 
 export class PlaylistPlayerSession {
@@ -74,6 +76,8 @@ export class PlaylistPlayerSession {
 
   private playlist: PlaylistTrack[];
 
+  private readonly random: () => number;
+
   private readonly reloadPlaylist?: () => Promise<PlaylistTrack[]>;
 
   private readonly revealTrack?: (track: PlaylistTrack) => Promise<void>;
@@ -81,6 +85,10 @@ export class PlaylistPlayerSession {
   private searchQuery = "";
 
   private selectedIndex = 0;
+
+  private shuffle: boolean;
+
+  private shuffleOrder: number[] = [];
 
   private operationQueue: Promise<void> = Promise.resolve();
 
@@ -94,8 +102,13 @@ export class PlaylistPlayerSession {
     this.playlist = playlist;
     this.deleteTrack = options.deleteTrack;
     this.loop = options.loop ?? false;
+    this.random = options.random ?? Math.random;
     this.reloadPlaylist = options.reloadPlaylist;
     this.revealTrack = options.revealTrack;
+    this.shuffle = options.shuffle ?? false;
+    if (this.shuffle) {
+      this.resetShuffleOrder(this.selectedIndex);
+    }
     this.unsubscribeBackend = backend.subscribe((event) => {
       void this.handleBackendEvent(event);
     });
@@ -116,6 +129,7 @@ export class PlaylistPlayerSession {
       playlist: this.playlist,
       searchQuery: this.searchQuery,
       selectedIndex: this.selectedIndex,
+      shuffle: this.shuffle,
       status: backendSnapshot.status,
       timePositionSeconds: backendSnapshot.timePositionSeconds,
     };
@@ -212,29 +226,35 @@ export class PlaylistPlayerSession {
     this.emit();
   }
 
-  appendSearchQuery(text: string) {
-    if (!text) {
-      return;
+  toggleShuffle() {
+    this.shuffle = !this.shuffle;
+    if (this.shuffle) {
+      this.resetShuffleOrder(this.currentIndex ?? this.selectedIndex);
     }
+    this.emit();
+  }
 
+  appendSearchQuery(text: string) {
+    if (!text) return;
     this.searchQuery += text;
     this.syncSelectionToSearch();
   }
 
   deleteSearchCharacter() {
-    if (!this.searchQuery) {
-      return;
-    }
+    if (!this.searchQuery) return;
 
     this.searchQuery = this.searchQuery.slice(0, -1);
     this.syncSelectionToSearch();
   }
 
-  clearSearch() {
-    if (!this.searchQuery) {
-      return;
-    }
+  deleteSearchWord() {
+    if (!this.searchQuery) return;
+    this.searchQuery = this.searchQuery.replace(/\s*\S+\s*$/, "");
+    this.syncSelectionToSearch();
+  }
 
+  clearSearch() {
+    if (!this.searchQuery) return;
     this.searchQuery = "";
     this.emit();
   }
@@ -242,6 +262,9 @@ export class PlaylistPlayerSession {
   async playSelected() {
     const selectedIndex = this.selectedIndex;
     await this.enqueueOperation(async () => {
+      if (this.shuffle) {
+        this.resetShuffleOrder(selectedIndex);
+      }
       await this.playIndex(selectedIndex);
     });
   }
@@ -385,6 +408,10 @@ export class PlaylistPlayerSession {
           this.currentIndex = nextCurrentIndex === -1 ? null : nextCurrentIndex;
         }
 
+        if (this.shuffle) {
+          this.resetShuffleOrder(this.currentIndex ?? this.selectedIndex);
+        }
+
         this.emit();
       } catch (error) {
         this.reportError(error);
@@ -443,6 +470,24 @@ export class PlaylistPlayerSession {
     }
 
     const baseIndex = this.currentIndex ?? this.selectedIndex;
+    if (this.shuffle) {
+      let orderIndex = this.shuffleOrder.indexOf(baseIndex);
+      if (orderIndex === -1) {
+        this.resetShuffleOrder(baseIndex);
+        orderIndex = 0;
+      }
+
+      const nextOrderIndex = orderIndex + delta;
+      const shouldWrap = wrap || this.loop;
+      if (nextOrderIndex < 0 || nextOrderIndex >= this.shuffleOrder.length) {
+        return shouldWrap
+          ? this.shuffleOrder[wrapIndex(nextOrderIndex, this.shuffleOrder.length)] ?? null
+          : null;
+      }
+
+      return this.shuffleOrder[nextOrderIndex] ?? null;
+    }
+
     const nextIndex = baseIndex + delta;
     const shouldWrap = wrap || this.loop;
 
@@ -455,6 +500,24 @@ export class PlaylistPlayerSession {
     }
 
     return nextIndex;
+  }
+
+  private resetShuffleOrder(firstIndex: number) {
+    const remainingIndices = this.playlist
+      .map((_, index) => index)
+      .filter((index) => index !== firstIndex);
+
+    for (let index = remainingIndices.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(this.random() * (index + 1));
+      [remainingIndices[index], remainingIndices[swapIndex]] = [
+        remainingIndices[swapIndex]!,
+        remainingIndices[index]!,
+      ];
+    }
+
+    this.shuffleOrder = this.playlist[firstIndex]
+      ? [firstIndex, ...remainingIndices]
+      : remainingIndices;
   }
 
   private handleBackendEvent(event: PlayerBackendEvent) {

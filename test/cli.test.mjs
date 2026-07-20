@@ -24,6 +24,7 @@ test("cli --help exits successfully", () => {
 
   expect(result.status).toBe(0);
   expect(result.stdout).toMatch(/Usage: osu-play \[options\]/);
+  expect(result.stdout).toMatch(/--shuffle/);
 });
 
 test("cli reports a missing Realm database cleanly", () => {

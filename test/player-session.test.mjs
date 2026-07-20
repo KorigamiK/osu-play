@@ -231,6 +231,60 @@ describe("player session", () => {
     expect(snapshot.currentIndex).toBe(1);
   });
 
+  test("plays every track in a stable shuffled order", async () => {
+    const backend = new FakeBackend();
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "First"),
+        createTrack("2", "Second"),
+        createTrack("3", "Third"),
+        createTrack("4", "Fourth"),
+      ],
+      backend,
+      { random: () => 0, shuffle: true },
+    );
+
+    await session.playSelected();
+    expect(session.getSnapshot().currentTrack?.title).toBe("First");
+
+    backend.emit({
+      reason: "eof",
+      type: "ended",
+    });
+    await Promise.resolve();
+    expect(session.getSnapshot().currentTrack?.title).toBe("Third");
+
+    await session.playNext();
+    expect(session.getSnapshot().currentTrack?.title).toBe("Fourth");
+
+    await session.playNext();
+    expect(session.getSnapshot().currentTrack?.title).toBe("Second");
+
+    await session.playPrevious();
+    expect(session.getSnapshot().currentTrack?.title).toBe("Fourth");
+  });
+
+  test("starts a new shuffle cycle from an explicitly selected track", async () => {
+    const session = new PlaylistPlayerSession(
+      [
+        createTrack("1", "First"),
+        createTrack("2", "Second"),
+        createTrack("3", "Third"),
+        createTrack("4", "Fourth"),
+      ],
+      new FakeBackend(),
+      { random: () => 0 },
+    );
+
+    session.setSelectionIndex(2);
+    session.toggleShuffle();
+    await session.playSelected();
+    await session.playNext();
+
+    expect(session.getSnapshot().shuffle).toBe(true);
+    expect(session.getSnapshot().currentTrack?.title).toBe("Second");
+  });
+
   test("updates selection from the jump query", () => {
     const backend = new FakeBackend();
     const session = new PlaylistPlayerSession(
@@ -363,6 +417,24 @@ describe("player screen helpers", () => {
     expect(session.getSnapshot().searchQuery).toBe("g a");
   });
 
+  test("toggles shuffle with x outside search mode", () => {
+    const session = new PlaylistPlayerSession(
+      [createTrack("1", "Alpha"), createTrack("2", "Beta")],
+      new FakeBackend(),
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("x");
+    expect(session.getSnapshot().shuffle).toBe(true);
+    screen.setSnapshot(session.getSnapshot());
+    expect(screen.render(80).join("\n")).toContain("shuffle on");
+
+    screen.handleInput("/");
+    screen.handleInput("x");
+    expect(session.getSnapshot().searchQuery).toBe("x");
+    expect(session.getSnapshot().shuffle).toBe(true);
+  });
+
   test("navigates between matching search results", () => {
     const session = new PlaylistPlayerSession(
       [
@@ -433,6 +505,24 @@ describe("player screen helpers", () => {
     expect(session.getSnapshot().selectedIndex).toBe(0);
     screen.handleInput("j");
     expect(session.getSnapshot().selectedIndex).toBe(2);
+  });
+
+  test("deletes the previous search word with ctrl-w", () => {
+    const session = new PlaylistPlayerSession(
+      [createTrack("1", "Blue Moon Remix")],
+      new FakeBackend(),
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    screen.handleInput("/");
+    for (const character of "blue moon remix") screen.handleInput(character);
+    screen.handleInput("\x17");
+    expect(session.getSnapshot().searchQuery).toBe("blue moon");
+
+    screen.handleInput("\x17");
+    expect(session.getSnapshot().searchQuery).toBe("blue");
+    screen.handleInput("\x17");
+    expect(session.getSnapshot().searchQuery).toBe("");
   });
 
   test("requires a second confirmation key before deleting a beatmap set", async () => {

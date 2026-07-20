@@ -46,6 +46,9 @@ osu-play --exportPlaylist playlist.txt
 
 # Loop the playlist
 osu-play --loop
+
+# Start in shuffle mode
+osu-play --shuffle
 ```
 
 ### TUI Controls
@@ -57,12 +60,14 @@ osu-play --loop
 - `o`: Reveal the selected track in the native file manager
 - `n` / `p`: Next or previous track
 - `PageUp` / `PageDown`: Jump faster through the playlist
+- `x`: Toggle shuffle mode
 - `r`: Toggle looping
 - `s`: Stop playback
 - `q`: Quit
 - `/`: Enter search mode
 - Type in search mode: Filter tracks by title
 - `Up`/`Down` or `Ctrl+P`/`Ctrl+N` in search mode: Navigate matching tracks
+- `Ctrl+W` in search mode: Delete the previous word
 - `Backspace`: Edit the search query
 - `Enter` in search mode: Play the selected match, leave search entry, and keep the filter
 - `Esc`: Leave search mode, or clear the current query outside search mode
@@ -83,6 +88,7 @@ const db = await getLazerDB(realmPath);
 - `--osuDataDir, -d`: Override the osu!lazer data directory
 - `--configDir, -c`: Deprecated and ignored
 - `--loop, -l`: Restart from the beginning when playback reaches the end
+- `--shuffle, -s`: Play the playlist in shuffled order
 - `--help, -h`: Show help
 
 ## Development
