@@ -9,14 +9,15 @@
 
 </h1>
 
-> Listen to your favourite [osu!lazer](https://lazer.ppy.sh) beatmaps as a
-> spotify playlist from the terminal
+> Turn your [osu!lazer](https://lazer.ppy.sh) beatmap library into a terminal
+> music player or a local music server for clients such as Kopuz.
 
 ## Requirements
 
 - Node.js `20+`
-- `mpv` available on your `PATH`
 - An osu!lazer install with beatmaps available locally
+- `mpv` available on your `PATH` for the terminal player (not required for API
+  or playlist export modes)
 
 If you're developing locally, Realm's native bindings are still the one awkward part of this stack. Use the repo's `setup` script so Bun install and the Realm repair step happen in the right order.
 
@@ -49,6 +50,9 @@ osu-play --loop
 
 # Start in shuffle mode
 osu-play --shuffle
+
+# Serve your library to Kopuz and other compatible clients
+osu-play --api
 ```
 
 ### TUI Controls
@@ -72,7 +76,41 @@ osu-play --shuffle
 - `Enter` in search mode: Play the selected match, leave search entry, and keep the filter
 - `Esc`: Leave search mode, or clear the current query outside search mode
 
-### API
+### Provider API for Kopuz
+
+osu!play 1.4 adds a localhost music-provider mode that makes your existing
+beatmap library available inside Kopuz—with album grouping, beatmap
+backgrounds as artwork, original-quality streaming, and no separate library
+import.
+
+Start the provider:
+
+```bash
+osu-play --api
+```
+
+The server listens only on `http://127.0.0.1:4533`. In Kopuz:
+
+1. Add a media server and choose **Custom (manual API)**.
+2. Enter `http://127.0.0.1:4533` as the server URL.
+3. Enter any non-empty username and password.
+
+The provider exposes each osu! beatmap set as an album, streams the original
+audio files, and uses beatmap backgrounds as cover art. It is intentionally
+read-only: favorites and playlists are shown as empty and remote mutations are
+not supported. Changes to the osu!lazer library are picked up the next time
+Kopuz starts a library sync.
+
+Use a different local port if needed:
+
+```bash
+osu-play --api --apiPort 5533
+```
+
+The API binds only to localhost and is not intended for LAN or internet
+exposure.
+
+### Library API
 
 ```ts
 import { getLazerDB, getRealmDBPath } from "osu-play";
@@ -83,6 +121,8 @@ const db = await getLazerDB(realmPath);
 
 ## Options
 
+- `--api`: Run the localhost Subsonic-compatible provider instead of the TUI
+- `--apiPort`: Provider port (default: `4533`)
 - `--reload, -r`: Deprecated and ignored
 - `--exportPlaylist`: Export the discovered track paths to a file instead of launching the TUI
 - `--osuDataDir, -d`: Override the osu!lazer data directory

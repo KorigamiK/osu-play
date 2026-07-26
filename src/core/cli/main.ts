@@ -5,43 +5,33 @@ import { ProcessTerminal, TUI } from "@earendil-works/pi-tui";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import { buildPlaylist, type PlaylistTrack } from "../playlist/mod.js";
+import { startApiServer } from "../api/server.js";
+import {
+  createLazerCatalogStore,
+  deleteBeatmapSetFromLazer,
+  loadPlaylistFromLazer,
+} from "../lazer/library.js";
+import type { PlaylistTrack } from "../playlist/mod.js";
 import { MpvPlayerBackend, PlaylistPlayerSession } from "../player/mod.js";
 import { PlaylistPlayerScreen } from "../tui/player-screen.js";
-import { getDefaultOsuDataDir, getRealmDBPath } from "../utils/mod.js";
-
-function formatRealmLoadError(error: unknown) {
-  return [
-    "Realm native bindings could not be loaded.",
-    `Current Node runtime: ${process.version}.`,
-    "To repair Realm bindings in this project, run `bun run repair:realm` (or `bun run setup` to reinstall dependencies).",
-    "If you installed dependencies on Node 22, switch to Node 20 LTS and rerun the repair command.",
-    `Original error: ${error instanceof Error ? error.message : String(error)}`,
-  ].join("\n");
-}
-
-async function loadRealmDependencies() {
-  try {
-    const [{ default: Realm }, lazerModule] = await Promise.all([
-      import("realm"),
-      import("../lazer/mod.js"),
-    ]);
-
-    return {
-      Realm,
-      ...lazerModule,
-    };
-  } catch (error) {
-    throw new Error(formatRealmLoadError(error), { cause: error });
-  }
-}
+import { getDefaultOsuDataDir } from "../utils/mod.js";
 
 export function getArgs() {
   return yargs(hideBin(process.argv))
     .scriptName("osu-play")
     .usage(
-      "Play music from your osu!lazer beatmaps in a minimal terminal player\nUsage: $0 [options]",
+      "Play or serve music from your osu!lazer beatmaps\nUsage: $0 [options]",
     )
+    .option("api", {
+      type: "boolean",
+      default: false,
+      describe: "Run a localhost Subsonic API for music clients such as Kopuz",
+    })
+    .option("apiPort", {
+      type: "number",
+      default: 4533,
+      describe: "Port for --api mode (binds to 127.0.0.1)",
+    })
     .option("reload", {
       type: "boolean",
       default: false,
@@ -75,51 +65,42 @@ export function getArgs() {
       alias: "s",
       describe: "Play the playlist in shuffled order",
     })
+    .check((argv) => {
+      if (
+        !Number.isInteger(argv.apiPort)
+        || argv.apiPort < 1
+        || argv.apiPort > 65_535
+      ) {
+        throw new Error("--apiPort must be an integer between 1 and 65535");
+      }
+
+      const conflictingMode = [
+        argv.exportPlaylist ? "exportPlaylist" : null,
+        argv.loop ? "loop" : null,
+        argv.shuffle ? "shuffle" : null,
+      ].find(Boolean);
+      if (argv.api && conflictingMode) {
+        throw new Error(
+          `--api cannot be combined with --${conflictingMode}`,
+        );
+      }
+
+      return true;
+    })
     .alias("help", "h")
     .help()
     .parse();
-}
-
-async function createPlaylist(osuDataDir: string) {
-  const realmDBPath = getRealmDBPath({ osuDataDir });
-  if (!realmDBPath) {
-    throw new Error("Realm DB not found");
-  }
-
-  const {
-    Realm,
-    formatLazerSchemaCompatibilityError,
-    getBeatmapSets,
-    getLazerDB,
-    inspectLazerSchema,
-  } = await loadRealmDependencies();
-
-  Realm.flags.ALLOW_CLEAR_TEST_STATE = true;
-
-  const realm = await getLazerDB(realmDBPath);
-
-  try {
-    const schemaReport = inspectLazerSchema(realm);
-    if (!schemaReport.compatible) {
-      throw new Error(formatLazerSchemaCompatibilityError(schemaReport));
-    }
-
-    return buildPlaylist(getBeatmapSets(realm), osuDataDir);
-  } finally {
-    realm.close();
-  }
 }
 
 async function deleteTrackFromCollection(
   track: PlaylistTrack,
   osuDataDir: string,
 ) {
-  const { deleteBeatmapSet } = await loadRealmDependencies();
-  await deleteBeatmapSet(track, osuDataDir);
+  await deleteBeatmapSetFromLazer(track, osuDataDir);
 }
 
 async function runTuiPlayer(
-  playlist: Awaited<ReturnType<typeof createPlaylist>>,
+  playlist: Awaited<ReturnType<typeof loadPlaylistFromLazer>>,
   osuDataDir: string,
   loop: boolean,
   shuffle: boolean,
@@ -129,7 +110,7 @@ async function runTuiPlayer(
   const session = new PlaylistPlayerSession(playlist, backend, {
     deleteTrack: (track) => deleteTrackFromCollection(track, osuDataDir),
     loop,
-    reloadPlaylist: () => createPlaylist(osuDataDir),
+    reloadPlaylist: () => loadPlaylistFromLazer(osuDataDir),
     revealTrack: (track) => revealFile(track.path),
     shuffle,
   });
@@ -171,6 +152,37 @@ async function runTuiPlayer(
   }
 }
 
+async function runApiMode(osuDataDir: string, port: number) {
+  const catalogStore = await createLazerCatalogStore(osuDataDir);
+  const server = await startApiServer({
+    catalogStore,
+    port,
+  });
+
+  console.log(`[INFO] osu-play API listening at ${server.url}`);
+  console.log(
+    "[INFO] In Kopuz, add a Custom server with this URL and any non-empty username/password.",
+  );
+  console.log("[INFO] Press Ctrl+C to stop.");
+
+  let resolveShutdown: (() => void) | undefined;
+  const shutdown = new Promise<void>((resolve) => {
+    resolveShutdown = resolve;
+  });
+  const handleSignal = () => resolveShutdown?.();
+
+  process.once("SIGINT", handleSignal);
+  process.once("SIGTERM", handleSignal);
+
+  try {
+    await shutdown;
+  } finally {
+    process.off("SIGINT", handleSignal);
+    process.off("SIGTERM", handleSignal);
+    await server.close();
+  }
+}
+
 export async function main() {
   const argv = await getArgs();
 
@@ -186,7 +198,12 @@ export async function main() {
     );
   }
 
-  const playlist = await createPlaylist(argv.osuDataDir);
+  if (argv.api) {
+    await runApiMode(argv.osuDataDir, argv.apiPort);
+    return;
+  }
+
+  const playlist = await loadPlaylistFromLazer(argv.osuDataDir);
 
   if (argv.exportPlaylist) {
     const playlistContents = playlist.map((track) => track.path).join("\n");
