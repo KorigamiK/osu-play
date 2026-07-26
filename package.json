@@ -1,7 +1,7 @@
 {
   "name": "osu-play",
-  "version": "1.3.3",
-  "description": "Play music from your osu!lazer beatmaps from the terminal.",
+  "version": "1.4.0",
+  "description": "Play and stream music from your osu!lazer beatmaps.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -75,6 +75,9 @@
     "cli",
     "music",
     "game",
+    "subsonic",
+    "kopuz",
+    "music-server",
     "typescript"
   ],
   "repository": {
