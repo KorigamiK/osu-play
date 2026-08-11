@@ -62,6 +62,8 @@ osu-play --api
 - `Enter`: Play the selected track
 - `Space`: Pause or resume playback
 - `o`: Reveal the selected track in the native file manager
+- `d`: Mark the selected beatmap set for deletion after confirmation
+- `u`: Undo the most recent deletion while osu!lazer has not cleaned it up
 - `n` / `p`: Next or previous track
 - `PageUp` / `PageDown`: Jump faster through the playlist
 - `x`: Toggle shuffle mode

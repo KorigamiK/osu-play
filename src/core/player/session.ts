@@ -59,6 +59,7 @@ type PlaylistPlayerSessionOptions = {
   loop?: boolean;
   random?: () => number;
   reloadPlaylist?: () => Promise<PlaylistTrack[]>;
+  restoreTrack?: (track: PlaylistTrack) => Promise<void>;
   revealTrack?: (track: PlaylistTrack) => Promise<void>;
   shuffle?: boolean;
 };
@@ -80,7 +81,11 @@ export class PlaylistPlayerSession {
 
   private readonly reloadPlaylist?: () => Promise<PlaylistTrack[]>;
 
+  private readonly restoreTrack?: (track: PlaylistTrack) => Promise<void>;
+
   private readonly revealTrack?: (track: PlaylistTrack) => Promise<void>;
+
+  private lastDeletedTrack: PlaylistTrack | null = null;
 
   private searchQuery = "";
 
@@ -104,6 +109,7 @@ export class PlaylistPlayerSession {
     this.loop = options.loop ?? false;
     this.random = options.random ?? Math.random;
     this.reloadPlaylist = options.reloadPlaylist;
+    this.restoreTrack = options.restoreTrack;
     this.revealTrack = options.revealTrack;
     this.shuffle = options.shuffle ?? false;
     if (this.shuffle) {
@@ -121,6 +127,7 @@ export class PlaylistPlayerSession {
 
     return {
       backendName: backendSnapshot.backendName,
+      canUndoDelete: this.lastDeletedTrack !== null,
       currentIndex: this.currentIndex,
       currentTrack,
       durationSeconds: backendSnapshot.durationSeconds,
@@ -391,6 +398,7 @@ export class PlaylistPlayerSession {
         }
 
         await this.deleteTrack(track);
+        this.lastDeletedTrack = track;
         this.playlist = await this.reloadPlaylist();
         this.selectedIndex = clampIndex(selectedIndex, this.playlist.length);
 
@@ -402,6 +410,51 @@ export class PlaylistPlayerSession {
         }
 
         if (!deletingCurrentTrack && currentTrack) {
+          const nextCurrentIndex = this.playlist.findIndex(
+            (playlistTrack) => playlistTrack.hash === currentTrack.hash,
+          );
+          this.currentIndex = nextCurrentIndex === -1 ? null : nextCurrentIndex;
+        }
+
+        if (this.shuffle) {
+          this.resetShuffleOrder(this.currentIndex ?? this.selectedIndex);
+        }
+
+        this.emit();
+      } catch (error) {
+        this.reportError(error);
+      }
+    });
+  }
+
+  async undoLastDeletion() {
+    await this.enqueueOperation(async () => {
+      const track = this.lastDeletedTrack;
+      if (!track) {
+        return;
+      }
+
+      if (!this.restoreTrack || !this.reloadPlaylist) {
+        this.reportError(new Error("Beatmap restoration is unavailable in this session."));
+        return;
+      }
+
+      try {
+        this.clearError();
+        const currentTrack =
+          this.currentIndex !== null ? this.playlist[this.currentIndex] ?? null : null;
+        await this.restoreTrack(track);
+        this.lastDeletedTrack = null;
+        this.playlist = await this.reloadPlaylist();
+
+        const restoredIndex = this.playlist.findIndex(
+          (playlistTrack) => playlistTrack.hash === track.hash,
+        );
+        this.selectedIndex = restoredIndex === -1
+          ? clampIndex(this.selectedIndex, this.playlist.length)
+          : restoredIndex;
+
+        if (currentTrack) {
           const nextCurrentIndex = this.playlist.findIndex(
             (playlistTrack) => playlistTrack.hash === currentTrack.hash,
           );

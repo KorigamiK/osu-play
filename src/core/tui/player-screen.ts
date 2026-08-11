@@ -277,6 +277,11 @@ export class PlaylistPlayerScreen implements Component {
       return;
     }
 
+    if (matchesKey(data, "u")) {
+      void this.session.undoLastDeletion();
+      return;
+    }
+
     if (matchesKey(data, Key.backspace)) {
       this.session.deleteSearchCharacter();
       return;
@@ -415,7 +420,7 @@ export class PlaylistPlayerScreen implements Component {
         style(
           this.searchMode
             ? "type to filter · ↑/↓ results · enter play · ctrl-w word · esc leave"
-            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · x shuffle · r loop · o reveal · d delete · / search · q quit",
+            : "j/k move · ⏎ play · space pause · n/p track · h/l seek · x shuffle · r loop · o reveal · d delete · u undo · / search · q quit",
           DIM,
         ),
         width,

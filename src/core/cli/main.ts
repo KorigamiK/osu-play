@@ -10,6 +10,7 @@ import {
   createLazerCatalogStore,
   deleteBeatmapSetFromLazer,
   loadPlaylistFromLazer,
+  restoreBeatmapSetInLazer,
 } from "../lazer/library.js";
 import type { PlaylistTrack } from "../playlist/mod.js";
 import { MpvPlayerBackend, PlaylistPlayerSession } from "../player/mod.js";
@@ -111,6 +112,7 @@ async function runTuiPlayer(
     deleteTrack: (track) => deleteTrackFromCollection(track, osuDataDir),
     loop,
     reloadPlaylist: () => loadPlaylistFromLazer(osuDataDir),
+    restoreTrack: (track) => restoreBeatmapSetInLazer(track, osuDataDir),
     revealTrack: (track) => revealFile(track.path),
     shuffle,
   });

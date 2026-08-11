@@ -85,6 +85,14 @@ export async function deleteBeatmapSetFromLazer(
   await deleteBeatmapSet(track, osuDataDir);
 }
 
+export async function restoreBeatmapSetInLazer(
+  track: Pick<PlaylistTrack, "beatmapSetHash" | "beatmapSetId" | "title">,
+  osuDataDir: string,
+) {
+  const { restoreBeatmapSet } = await loadRealmDependencies();
+  await restoreBeatmapSet(track, osuDataDir);
+}
+
 export type CatalogStore = {
   getCatalog(): MusicCatalog;
   refreshIfChanged(): Promise<MusicCatalog>;
