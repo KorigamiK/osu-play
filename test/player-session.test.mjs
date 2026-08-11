@@ -373,6 +373,39 @@ describe("player session", () => {
       "Gamma",
     ]);
     expect(session.getSnapshot().selectedIndex).toBe(0);
+    expect(session.getSnapshot().canUndoDelete).toBe(true);
+  });
+
+  test("restores the most recently deleted beatmap set", async () => {
+    const restoredTracks = [];
+    let deleted = false;
+    const alpha = createTrack("1", "Alpha");
+    const beta = createTrack("2", "Beta");
+    const session = new PlaylistPlayerSession(
+      [alpha, beta],
+      new FakeBackend(),
+      {
+        deleteTrack: async () => {
+          deleted = true;
+        },
+        reloadPlaylist: async () => deleted ? [beta] : [alpha, beta],
+        restoreTrack: async (track) => {
+          restoredTracks.push(track.title);
+          deleted = false;
+        },
+      },
+    );
+
+    await session.deleteSelectedTrack();
+    await session.undoLastDeletion();
+
+    expect(restoredTracks).toEqual(["Alpha"]);
+    expect(session.getSnapshot().playlist.map((track) => track.title)).toEqual([
+      "Alpha",
+      "Beta",
+    ]);
+    expect(session.getSnapshot().selectedIndex).toBe(0);
+    expect(session.getSnapshot().canUndoDelete).toBe(false);
   });
 });
 
@@ -549,6 +582,34 @@ describe("player screen helpers", () => {
     screen.handleInput("d");
     await Promise.resolve();
     expect(deleteCalls).toBe(1);
+  });
+
+  test("undoes the most recent deletion with u", async () => {
+    let deleted = false;
+    let restoreCalls = 0;
+    const alpha = createTrack("1", "Alpha");
+    const session = new PlaylistPlayerSession(
+      [alpha],
+      new FakeBackend(),
+      {
+        deleteTrack: async () => {
+          deleted = true;
+        },
+        reloadPlaylist: async () => deleted ? [] : [alpha],
+        restoreTrack: async () => {
+          restoreCalls += 1;
+          deleted = false;
+        },
+      },
+    );
+    const screen = new PlaylistPlayerScreen(session, () => 20);
+
+    await session.deleteSelectedTrack();
+    screen.handleInput("u");
+    await session.undoLastDeletion();
+
+    expect(restoreCalls).toBe(1);
+    expect(session.getSnapshot().playlist).toEqual([alpha]);
   });
 
   test("cancels beatmap deletion when the confirmation key is not repeated", () => {

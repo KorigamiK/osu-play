@@ -73,9 +73,10 @@ function queryBeatmapSet(
   return null;
 }
 
-export async function deleteBeatmapSet(
+async function setBeatmapSetDeletePending(
   track: Pick<PlaylistTrack, "beatmapSetHash" | "beatmapSetId" | "title">,
   osuDataDir: string,
+  deletePending: boolean,
 ) {
   const realmDBPath = getRealmDBPath({ osuDataDir });
   if (!realmDBPath) {
@@ -85,7 +86,7 @@ export async function deleteBeatmapSet(
   const realm = await Realm.open({ path: realmDBPath });
 
   try {
-    let markedForDeletion = false;
+    let changed = false;
 
     realm.write(() => {
       const beatmapSet = queryBeatmapSet(realm, track);
@@ -93,24 +94,42 @@ export async function deleteBeatmapSet(
         throw new Error(`Beatmap set for "${track.title}" no longer exists.`);
       }
 
-      if (beatmapSet.Protected) {
+      if (deletePending && beatmapSet.Protected) {
         throw new Error(`"${track.title}" is protected and cannot be deleted.`);
       }
 
-      if (beatmapSet.DeletePending) {
+      if (beatmapSet.DeletePending === deletePending) {
         return;
       }
 
-      beatmapSet.DeletePending = true;
-      markedForDeletion = true;
+      beatmapSet.DeletePending = deletePending;
+      changed = true;
     });
 
-    if (!markedForDeletion) {
-      throw new Error(`"${track.title}" is already pending deletion.`);
+    if (!changed) {
+      throw new Error(
+        deletePending
+          ? `"${track.title}" is already pending deletion.`
+          : `"${track.title}" is not pending deletion.`,
+      );
     }
   } finally {
     realm.close();
   }
+}
+
+export function deleteBeatmapSet(
+  track: Pick<PlaylistTrack, "beatmapSetHash" | "beatmapSetId" | "title">,
+  osuDataDir: string,
+) {
+  return setBeatmapSetDeletePending(track, osuDataDir, true);
+}
+
+export function restoreBeatmapSet(
+  track: Pick<PlaylistTrack, "beatmapSetHash" | "beatmapSetId" | "title">,
+  osuDataDir: string,
+) {
+  return setBeatmapSetDeletePending(track, osuDataDir, false);
 }
 
 export const getNamedFileHash = (fileName: string, beatmapSet: BeatmapSet) => {

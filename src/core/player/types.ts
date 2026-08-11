@@ -41,6 +41,7 @@ export interface PlayerBackend {
 
 export type PlaylistPlayerSnapshot = {
   backendName: string;
+  canUndoDelete: boolean;
   currentIndex: number | null;
   currentTrack: PlaylistTrack | null;
   durationSeconds: number | null;
